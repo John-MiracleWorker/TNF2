@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --background: 40 30% 96%;
+  --foreground: 215 74% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 74% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 74% 15%;
+  --primary: 215 74% 15%;
+  --primary-foreground: 40 30% 96%;
+  --secondary: 39 78% 61%;
+  --secondary-foreground: 215 74% 15%;
+  --muted: 40 10% 90%;
+  --muted-foreground: 215 20% 25%;
+  --accent: 39 78% 61%;
+  --accent-foreground: 215 74% 15%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 40 30% 96%;
+  --border: 215 20% 85%;
+  --input: 215 20% 85%;
+  --ring: 215 74% 15%;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: 215 74% 10%;
+  --foreground: 40 30% 96%;
+  --card: 215 74% 15%;
+  --card-foreground: 40 30% 96%;
+  --popover: 215 74% 15%;
+  --popover-foreground: 40 30% 96%;
+  --primary: 40 30% 96%;
+  --primary-foreground: 215 74% 15%;
+  --secondary: 39 78% 61%;
+  --secondary-foreground: 215 74% 15%;
+  --muted: 215 50% 20%;
+  --muted-foreground: 40 30% 80%;
+  --accent: 39 78% 61%;
+  --accent-foreground: 215 74% 15%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 40 30% 96%;
+  --border: 215 50% 30%;
+  --input: 215 50% 30%;
+  --ring: 39 78% 61%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+/* Mobile viewport fix - ensure no horizontal scrolling */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .nav-link {
+    @apply text-foreground hover:text-gold transition-colors duration-200;
+  }
+  
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-opacity-90 transition-all duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-opacity-90 transition-all duration-200;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-foreground mb-4;
+  }
+  
+  .section-subtitle {
+    @apply text-lg text-muted-foreground mb-8 max-w-3xl mx-auto;
+  }
+}
+
+/* Fix mobile navigation full width */
+header, nav {
+  width: 100%;
+  max-width: 100%;
+  left: 0;
+  right: 0;
+}
+
+/* Fix sidebar for mobile */
+.fixed.inset-0 {
+  width: 100vw;
+  height: 100vh;
+}

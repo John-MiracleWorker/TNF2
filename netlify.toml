@@ -1,0 +1,47 @@
+# Netlify configuration file
+
+[build]
+  # Directory to publish (relative to root of your repo)
+  publish = "dist"
+  # Default build command
+  command = "npm run build"
+
+# Redirect all routes to index.html for SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Set environment variables for production
+[build.environment]
+  # Add any non-sensitive environment variables here
+  NODE_VERSION = "18"
+  
+# Function settings
+[functions]
+  # Directory with serverless functions
+  directory = "netlify/functions"
+  # Set node_bundler to esbuild
+  node_bundler = "esbuild"
+
+# Scheduled functions for push notifications
+[[scheduled-functions]]
+  name = "morning-notifications"
+  schedule = "0 8 * * *"  # 8:00 AM UTC every day
+  function = "scheduled-notifications"
+  
+[[scheduled-functions]]
+  name = "midday-notifications"
+  schedule = "0 13 * * *"  # 1:00 PM UTC every day
+  function = "scheduled-notifications"
+  
+[[scheduled-functions]]
+  name = "evening-notifications"
+  schedule = "0 20 * * *"  # 8:00 PM UTC every day
+  function = "scheduled-notifications"
+  
+# Scheduled function for livestream monitoring
+[[scheduled-functions]]
+  name = "livestream-monitor"
+  schedule = "*/15 * * * *"  # Every 15 minutes
+  function = "livestream-monitor"
