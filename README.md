@@ -78,8 +78,8 @@ TrueNorth is a Progressive Web App (PWA) that combines Biblical wisdom with AI t
    
    Fill in your environment variables in `.env.local`:
    ```env
-   VITE_SUPABASE_URL=your_supabase_project_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   VITE_SUPABASE_URL=https://qkgtlxhuvuongwdzyizl.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFrZ3RseGh1dnVvbmd3ZHp5aXpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg5NDM1MDcsImV4cCI6MjA2NDUxOTUwN30.Hm3YuDkpSVSBwGS5fWr7LykF6JXNLFrgGIB6t6mms04
    ```
 
 4. **Set up Supabase**
