@@ -179,9 +179,9 @@ const LiveStreamPage = () => {
                       <Info className="h-4 w-4 mr-2" />
                       About
                     </TabsTrigger>\n
-                    <TabsTrigger value=\"past-streams\" className=\"flex items-center\">\n
-                      <Video className=\"h-4 w-4 mr-2\" />\n
-                      Past Streams\n
+                    <TabsTrigger value="past-streams" className="flex items-center">
+                      <Video className="h-4 w-4 mr-2" />
+                      Past Streams
                     </TabsTrigger>
                   </TabsList>
                 </CardHeader>
