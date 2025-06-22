@@ -12,8 +12,8 @@ const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
 serve(async (req) => {
   // Define CORS headers
   const corsHeaders = {
-    'Access-Control-Allow-Origin': 'https://find-true-north.net', // <-- Set your specific origin here
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Origin': '*', // Allow requests from any origin
+ 'Access-Control-Allow-Methods': 'POST, GET, OPTIONS', // Added GET for potential future use, though POST is primary
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400'
   };
@@ -28,7 +28,7 @@ serve(async (req) => {
 
     // For security, ensure this is a POST request
     if (req.method !== 'POST') {
-      return new Response(JSON.stringify({
+ return new Response(JSON.stringify({ // Ensure CORS headers are included for non-POST methods too
         error: 'Method not allowed'
       }), {
         status: 405,
