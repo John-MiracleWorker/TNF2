@@ -2,7 +2,7 @@ import { StrictMode, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { initializePWA } from './lib/pwa';
+import { pwaManager, initializePWA } from './lib/pwa';
 import { initializeNotifications } from './lib/notifications-helper';
 
 // Add error boundary for the entire app
@@ -45,6 +45,7 @@ class ErrorBoundary extends Component {
 // Initialize PWA and notifications (non-blocking)
 setTimeout(() => {
   try {
+    pwaManager.registerServiceWorker();
     // Initialize PWA features
     initializePWA();
     

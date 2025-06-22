@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Wifi, Calendar, MessageSquare, Bell, Share, ThumbsUp, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Wifi, Calendar, MessageSquare, Bell, Share, ThumbsUp, Info, Video } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { LiveStreamPlayer } from '@/components/livestream/LiveStreamPlayer';
 import { LiveChat } from '@/components/livestream/LiveChat';
@@ -17,6 +17,14 @@ interface UpcomingStream {
   thumbnail?: string;
 }
 
+interface PastStream {
+  id: string;
+  title: string;
+  description: string;
+  publishedAt: Date;
+  thumbnail: string;
+}
+
 const LiveStreamPage = () => {
   // Your YouTube channel ID
   const channelId = 'UCBLfKRb1HYpQmB9-Dz9UEvg'; // Replace with your actual channel ID
@@ -24,6 +32,7 @@ const LiveStreamPage = () => {
   
   const [isNotificationEnabled, setIsNotificationEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'about'>('upcoming');
+  const [pastStreams, setPastStreams] = useState<PastStream[]>([]); // Placeholder for past streams
   const [useRealChat, setUseRealChat] = useState(true); // State to toggle real YouTube chat
 
   // Example upcoming streams - in production, this would be fetched from an API
@@ -50,6 +59,27 @@ const LiveStreamPage = () => {
       thumbnail: 'https://images.pexels.com/photos/5119214/pexels-photo-5119214.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1'
     }
   ];
+
+  // Placeholder for fetching past streams from YouTube Data API
+  // In a real application, you would fetch the API key from Supabase
+  // and make API calls here.
+  useEffect(() => {
+    const fetchPastStreams = async () => {
+      // Replace with actual API fetching logic using YouTube Data API
+      // and your Supabase stored API key
+      console.log('Fetching past streams for channel:', channelId);
+      // Example placeholder data:
+      const dummyPastStreams: PastStream[] = [
+        { id: 'past1', title: 'Archived Service 1', description: 'A recording of a previous service.', publishedAt: new Date('2023-10-20T10:00:00Z'), thumbnail: 'https://images.pexels.com/photos/1112048/pexels-photo-1112048.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+        { id: 'past2', title: 'Archived Bible Study', description: 'Previous week\'s Bible study session.', publishedAt: new Date('2023-10-18T19:00:00Z'), thumbnail: 'https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+      ];
+      setPastStreams(dummyPastStreams);
+    };
+
+    fetchPastStreams();
+  }, [channelId]); // Refetch if channelId changes
+
+
 
   const toggleNotification = () => {
     // In a real application, this would register for push notifications
@@ -136,18 +166,22 @@ const LiveStreamPage = () => {
               </CardContent>
             </Card>
             
-            {/* Upcoming Streams and About */}
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'upcoming' | 'about')}>
+            {/* Upcoming Streams, Past Streams, and About */}
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as \'upcoming\' | \'about\' | \'past-streams\')}>
               <Card>
                 <CardHeader className="pb-2">
                   <TabsList>
                     <TabsTrigger value="upcoming" className="flex items-center">
                       <Calendar className="h-4 w-4 mr-2" />
-                      Upcoming Streams
+                      Upcoming
                     </TabsTrigger>
                     <TabsTrigger value="about" className="flex items-center">
                       <Info className="h-4 w-4 mr-2" />
                       About
+                    </TabsTrigger>\n
+                    <TabsTrigger value=\"past-streams\" className=\"flex items-center\">\n
+                      <Video className=\"h-4 w-4 mr-2\" />\n
+                      Past Streams\n
                     </TabsTrigger>
                   </TabsList>
                 </CardHeader>
@@ -178,12 +212,69 @@ const LiveStreamPage = () => {
                         <div className="shrink-0">
                           <Button variant="outline" size="sm">
                             <Bell className="h-4 w-4 mr-2" />
+                            Remind Me
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </TabsContent>
+
+                  <TabsContent value="past-streams" className="mt-0 space-y-4">
+                    {pastStreams.map((stream) => (
+                      <div key={stream.id} className="flex gap-4 border-b pb-4 last:border-0 last:pb-0">
+                        {stream.thumbnail && (
+                          <div className="w-32 h-20 rounded-md overflow-hidden shrink-0 hidden sm:block">
+                            <img 
+                              src={stream.thumbnail} 
+                              alt={stream.title}
+                              className="w-full h-full object-cover" 
+                            />
+                          </div>
+                        )}
+                        <div className="flex-grow">
+                          <h3 className="font-medium text-foreground">{stream.title}</h3>
+                          <p className="text-muted-foreground text-sm line-clamp-2 mt-1">{stream.description}</p>
+                          <div className="flex items-center mt-2">
+                            <Bell className="h-4 w-4 mr-2" />
                             Remind
                           </Button>
                         </div>
                       </div>
                     ))}
                   </TabsContent>
+
+ <TabsContent value="past-streams" className="mt-0 space-y-4">
+ <h2 className="text-2xl font-bold mb-4">Past Streams</h2>
+                    {pastStreams.map((stream) => (
+ <div key={stream.id} className="flex gap-4 border-b pb-4 last:border-0 last:pb-0">
+ {stream.thumbnail && (
+ <div className="w-32 h-20 rounded-md overflow-hidden shrink-0 hidden sm:block">
+ <img
+ src={stream.thumbnail}
+ alt={stream.title}
+ className="w-full h-full object-cover"
+ />
+ </div>
+ )}
+ <div className="flex-grow">
+ <h3 className="font-medium text-foreground">{stream.title}</h3>
+ <p className="text-muted-foreground text-sm line-clamp-2 mt-1">{stream.description}</p>
+ <div className="flex items-center mt-2">
+ <Calendar className="h-3.5 w-3.5 text-muted-foreground mr-1" />
+ <span className="text-xs text-muted-foreground">
+ {format(stream.publishedAt, 'MMM d, yyyy')}
+ </span>
+ </div>
+ </div>
+                        <div className="shrink-0">
+ <Button variant="outline" size="sm" onClick={() => window.open(`https://www.youtube.com/watch?v=${stream.id}`, '_blank')}>
+ <Video className="h-4 w-4 mr-2" />
+ Watch Again
+ </Button>
+ </div>
+                      </div>
+ ))}
+ </TabsContent>
                   
                   <TabsContent value="about" className="mt-0">
                     <div className="space-y-4">
