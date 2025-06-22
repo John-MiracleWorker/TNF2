@@ -10,51 +10,54 @@ const YOUTUBE_API_KEY = Deno.env.get('YOUTUBE_API_KEY') || '';
 const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 serve(async (req) => {
+  // Define CORS headers
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': 'https://find-true-north.net', // <-- Set your specific origin here
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400'
+  };
+
   try {
     // Handle preflight CORS
     if (req.method === 'OPTIONS') {
       return new Response('ok', {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders // Use the defined headers
       });
     }
-    
+
     // For security, ensure this is a POST request
     if (req.method !== 'POST') {
-      return new Response(JSON.stringify({ 
-        error: 'Method not allowed' 
-      }), { 
+      return new Response(JSON.stringify({
+        error: 'Method not allowed'
+      }), {
         status: 405,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } // Include CORS headers
       });
     }
-    
+
     // Check if the YouTube API key is configured
     if (!YOUTUBE_API_KEY) {
-      return new Response(JSON.stringify({ 
-        error: 'YouTube API key not configured' 
-      }), { 
+      return new Response(JSON.stringify({
+        error: 'YouTube API key not configured'
+      }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } // Include CORS headers
       });
     }
-    
+
     // Get the list of channels to monitor
     // This could come from a database or from the request
     const requestData = await req.json().catch(() => ({}));
     let channelIds = requestData.channelIds || [];
     let forceProcess = requestData.force || false;
-    
+
     // Initialize Supabase admin client
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') || '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     );
-    
+
     // If no channels were specified, try to get them from the database
     if (channelIds.length === 0) {
       // This would be a table where you store channel IDs to monitor
@@ -62,20 +65,20 @@ serve(async (req) => {
         .from('monitored_channels')
         .select('channel_id, platform')
         .eq('is_active', true);
-      
+
       if (!error && channels && channels.length > 0) {
         channelIds = channels.filter(c => c.platform === 'youtube').map(c => c.channel_id);
       }
-      
+
       // If still empty, use a default for demo
       if (channelIds.length === 0) {
         // UC_MfzsWz_0AclQlrl1h_dwg is just an example channel ID
         channelIds = ['UC_MfzsWz_0AclQlrl1h_dwg'];
       }
     }
-    
+
     const results = [];
-    
+
     // Process each channel
     for (const channelId of channelIds) {
       try {
@@ -85,7 +88,7 @@ serve(async (req) => {
           `https://www.googleapis.com/youtube/v3/search?` +
           `part=snippet&channelId=${channelId}&eventType=live&type=video&key=${YOUTUBE_API_KEY}`
         );
-        
+
         if (!liveCheckResponse.ok) {
           results.push({
             channelId,
@@ -94,9 +97,9 @@ serve(async (req) => {
           });
           continue;
         }
-        
+
         const liveData = await liveCheckResponse.json();
-        
+
         // If the channel is currently live, skip it
         if (liveData.items && liveData.items.length > 0) {
           results.push({
@@ -106,14 +109,14 @@ serve(async (req) => {
           });
           continue;
         }
-        
+
         // Step 2: Find most recent completed livestream
         const recentStreamResponse = await fetch(
           `https://www.googleapis.com/youtube/v3/search?` +
           `part=snippet&channelId=${channelId}&eventType=completed&type=video&` +
           `order=date&maxResults=1&key=${YOUTUBE_API_KEY}`
         );
-        
+
         if (!recentStreamResponse.ok) {
           results.push({
             channelId,
@@ -122,9 +125,9 @@ serve(async (req) => {
           });
           continue;
         }
-        
+
         const recentStreamData = await recentStreamResponse.json();
-        
+
         if (!recentStreamData.items || recentStreamData.items.length === 0) {
           results.push({
             channelId,
@@ -133,14 +136,14 @@ serve(async (req) => {
           });
           continue;
         }
-        
+
         const mostRecentStream = recentStreamData.items[0];
         const videoId = mostRecentStream.id.videoId;
-        
+
         // Step 3: Check if this stream was published recently (within the CHECK_INTERVAL)
         const publishTime = new Date(mostRecentStream.snippet.publishedAt).getTime();
         const currentTime = Date.now();
-        
+
         // Skip if the stream was not recently ended, unless force is true
         if (!forceProcess && currentTime - publishTime > CHECK_INTERVAL) {
           results.push({
@@ -152,14 +155,14 @@ serve(async (req) => {
           });
           continue;
         }
-        
+
         // Step 4: Check if we've already processed this video
         const { data: existingSermon, error: sermonCheckError } = await supabaseAdmin
           .from('sermon_summaries')
           .select('id, title')
           .eq('video_url', `https://www.youtube.com/watch?v=${videoId}`)
           .maybeSingle();
-        
+
         if (existingSermon) {
           results.push({
             channelId,
@@ -170,7 +173,7 @@ serve(async (req) => {
           });
           continue;
         }
-        
+
         // Step 5: Call the process-livestream function to process this video
         const processResponse = await fetch(
           `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-livestream`,
@@ -187,7 +190,7 @@ serve(async (req) => {
             })
           }
         );
-        
+
         if (!processResponse.ok) {
           results.push({
             channelId,
@@ -197,9 +200,9 @@ serve(async (req) => {
           });
           continue;
         }
-        
+
         const processResult = await processResponse.json();
-        
+
         results.push({
           channelId,
           status: 'processing_started',
@@ -208,7 +211,7 @@ serve(async (req) => {
           sermonId: processResult.sermon_id,
           details: processResult
         });
-        
+
       } catch (channelError) {
         results.push({
           channelId,
@@ -217,24 +220,24 @@ serve(async (req) => {
         });
       }
     }
-    
-    return new Response(JSON.stringify({ 
-      success: true, 
+
+    return new Response(JSON.stringify({
+      success: true,
       results,
       processed: results.filter(r => r.status === 'processing_started').length,
       timestamp: new Date().toISOString()
     }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } // Include CORS headers
     });
-    
+
   } catch (error) {
     console.error('Error in livestream-monitor:', error);
-    
-    return new Response(JSON.stringify({ 
-      error: error.message || 'Internal server error' 
-    }), { 
+
+    return new Response(JSON.stringify({
+      error: error.message || 'Internal server error'
+    }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } // Include CORS headers
     });
   }
 });
