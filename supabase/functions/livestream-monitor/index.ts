@@ -110,24 +110,24 @@ serve(async (req) => {
           continue;
         }
 
-        // Step 2: Find most recent completed livestream
-        const recentStreamResponse = await fetch(
+        // Step 2: Find recent videos
+        const recentVideosResponse = await fetch(
           `https://www.googleapis.com/youtube/v3/search?` +
-          `part=snippet&channelId=${channelId}&eventType=completed&type=video&` +
-          `order=date&maxResults=1&key=${YOUTUBE_API_KEY}`
+          `part=snippet&channelId=${channelId}&type=video&` + // Removed eventType=completed
+          `order=date&maxResults=50&key=${YOUTUBE_API_KEY}` // Changed maxResults to 50
         );
 
         if (!recentStreamResponse.ok) {
           results.push({
-            channelId,
-            status: 'error',
-            message: `YouTube API error: ${await recentStreamResponse.text()}`
+ channelId,
+ status: 'error',
+ message: `YouTube API error: ${await recentVideosResponse.text()}`
           });
           continue;
         }
 
-        const recentStreamData = await recentStreamResponse.json();
-
+        const recentStreamData = await recentVideosResponse.json();
+        
         if (!recentStreamData.items || recentStreamData.items.length === 0) {
           results.push({
             channelId,
@@ -137,80 +137,83 @@ serve(async (req) => {
           continue;
         }
 
-        const mostRecentStream = recentStreamData.items[0];
-        const videoId = mostRecentStream.id.videoId;
+        // Step 3: Iterate through recent videos and process if not already done
+        for (const item of recentStreamData.items) {
+          const videoId = item.id.videoId;
 
-        // Step 3: Check if this stream was published recently (within the CHECK_INTERVAL)
-        const publishTime = new Date(mostRecentStream.snippet.publishedAt).getTime();
-        const currentTime = Date.now();
+          // Check if we've already processed this video
+          const { data: existingSermon, error: sermonCheckError } = await supabaseAdmin
+            .from('sermon_summaries')
+            .select('id, title')
+            .eq('video_url', `https://www.youtube.com/watch?v=${videoId}`)
+            .maybeSingle();
 
-        // Skip if the stream was not recently ended, unless force is true
-        if (!forceProcess && currentTime - publishTime > CHECK_INTERVAL) {
-          results.push({
-            channelId,
-            status: 'skipped',
-            message: 'Most recent stream was not published recently',
-            videoId,
-            publishTime: mostRecentStream.snippet.publishedAt
-          });
-          continue;
-        }
-
-        // Step 4: Check if we've already processed this video
-        const { data: existingSermon, error: sermonCheckError } = await supabaseAdmin
-          .from('sermon_summaries')
-          .select('id, title')
-          .eq('video_url', `https://www.youtube.com/watch?v=${videoId}`)
-          .maybeSingle();
-
-        if (existingSermon) {
-          results.push({
-            channelId,
-            status: 'already_processed',
-            message: 'This livestream has already been processed',
-            videoId,
-            sermonId: existingSermon.id
-          });
-          continue;
-        }
-
-        // Step 5: Call the process-livestream function to process this video
-        const processResponse = await fetch(
-          `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-livestream`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              // No user token here as this is a system process
-            },
-            body: JSON.stringify({
-              videoId,
+          if (existingSermon) {
+            results.push({
               channelId,
-              manual: false
-            })
+              status: 'already_processed',
+              message: 'This video has already been processed',
+              videoId,
+              sermonId: existingSermon.id
+            });
+            continue; // Skip to the next video
           }
-        );
 
-        if (!processResponse.ok) {
+          // If not processed, call the process-livestream function
+          // We add a small delay to avoid hitting rate limits if processing many videos at once
+          // await new Promise(resolve => setTimeout(resolve, 1000)); // Optional: Add a delay
+
+          const processResponse = await fetch(
+            `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-livestream`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                // No user token here as this is a system process
+              },
+              body: JSON.stringify({
+                videoId,
+                channelId,
+                manual: false // Indicates this is an automated process
+              })
+            }
+          );
+
+          if (!processResponse.ok) {
+            const errorText = await processResponse.text();
+            console.error(`Failed to process video ${videoId}:`, errorText);
+
+            // Optionally update the sermon_summaries entry if it was created in process-livestream
+            // to reflect the processing error. This might require fetching the record first.
+
+            results.push({
+              channelId,
+              status: 'processing_error',
+              message: `Failed to process video ${videoId}: ${errorText}`,
+              videoId
+            });
+            // Continue to the next video even if one fails
+            continue;
+          }
+
+          const processResult = await processResponse.json();
+
           results.push({
             channelId,
             status: 'processing_error',
             message: `Failed to process livestream: ${await processResponse.text()}`,
             videoId
           });
-          continue;
+          continue; // This was processing_started message
+          results.push({
+ channelId,
+ status: 'processing_started',
+ message: 'Sermon processing has been started',
+ videoId,
+ sermonId: processResult.sermon_id,
+ details: processResult
+          });
         }
-
-        const processResult = await processResponse.json();
-
-        results.push({
-          channelId,
-          status: 'processing_started',
-          message: 'Sermon processing has been started',
-          videoId,
-          sermonId: processResult.sermon_id,
-          details: processResult
-        });
 
       } catch (channelError) {
         results.push({
