@@ -167,7 +167,7 @@ const LiveStreamPage = () => {
             </Card>
             
             {/* Upcoming Streams, Past Streams, and About */}
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as \'upcoming\' | \'about\' | \'past-streams\')}>
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'upcoming' | 'about' | 'past-streams')}>
               <Card>
                 <CardHeader className="pb-2">
                   <TabsList>
