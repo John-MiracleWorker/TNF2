@@ -49,6 +49,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
+import { callEdgeFunction } from '@/lib/supabase-functions';
 import { format, parseISO } from 'date-fns';
 
 // Type definitions for channel monitoring
@@ -279,23 +280,15 @@ export function AutoSermonProcessor() {
         return;
       }
 
-      // Ensure the user is authenticated before invoking the function
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('You must be logged in to check for sermons');
-      }
-
-      // Call the livestream-monitor Edge Function using the Supabase client
-      const { data, error } = await supabase.functions.invoke('livestream-monitor', {
-        body: {
+      // Call the livestream-monitor Edge Function
+      const data = await callEdgeFunction(
+        'livestream-monitor',
+        {
           channelIds: activeChannelIds,
-          force: false, // Set to true to force processing of old videos
+          force: false,
         },
-      });
-
-      if (error) {
-        throw new Error(`Failed to check for new sermons: ${error.message}`);
-      }
+        { authenticated: true, timeoutMs: 30000 }
+      );
       
       // Process results
       setProcessingResults(data.results || []);
