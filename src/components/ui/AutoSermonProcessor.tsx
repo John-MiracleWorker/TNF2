@@ -279,34 +279,23 @@ export function AutoSermonProcessor() {
         return;
       }
 
-      // Call the livestream-monitor Edge Function
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      if (!supabaseUrl) {
-        throw new Error('Supabase URL not configured');
-      }
-
+      // Ensure the user is authenticated before invoking the function
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('You must be logged in to check for sermons');
       }
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/livestream-monitor`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
+      // Call the livestream-monitor Edge Function using the Supabase client
+      const { data, error } = await supabase.functions.invoke('livestream-monitor', {
+        body: {
           channelIds: activeChannelIds,
           force: false, // Set to true to force processing of old videos
-        }),
+        },
       });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to check for new sermons: ${response.status}`);
-      }
 
-      const data = await response.json();
+      if (error) {
+        throw new Error(`Failed to check for new sermons: ${error.message}`);
+      }
       
       // Process results
       setProcessingResults(data.results || []);
