@@ -219,30 +219,6 @@ const LiveStreamPage = () => {
                     ))}
                   </TabsContent>
 
-                  <TabsContent value="past-streams" className="mt-0 space-y-4">
-                    {pastStreams.map((stream) => (
-                      <div key={stream.id} className="flex gap-4 border-b pb-4 last:border-0 last:pb-0">
-                        {stream.thumbnail && (
-                          <div className="w-32 h-20 rounded-md overflow-hidden shrink-0 hidden sm:block">
-                            <img 
-                              src={stream.thumbnail} 
-                              alt={stream.title}
-                              className="w-full h-full object-cover" 
-                            />
-                          </div>
-                        )}
-                        <div className="flex-grow">
-                          <h3 className="font-medium text-foreground">{stream.title}</h3>
-                          <p className="text-muted-foreground text-sm line-clamp-2 mt-1">{stream.description}</p>
-                          <div className="flex items-center mt-2">
-                            <Bell className="h-4 w-4 mr-2" />
-                            Remind
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </TabsContent>
-
  <TabsContent value="past-streams" className="mt-0 space-y-4">
  <h2 className="text-2xl font-bold mb-4">Past Streams</h2>
                     {pastStreams.map((stream) => (
