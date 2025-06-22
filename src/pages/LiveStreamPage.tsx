@@ -19,7 +19,7 @@ interface UpcomingStream {
 
 const LiveStreamPage = () => {
   // Your YouTube channel ID
-  const channelId = 'UC_MfzsWz_0AclQlrl1h_dwg'; // Replace with your actual channel ID
+  const channelId = 'UCBLfKRb1HYpQmB9-Dz9UEvg'; // Replace with your actual channel ID
   const platform = 'youtube' as const;
   
   const [isNotificationEnabled, setIsNotificationEnabled] = useState(false);
