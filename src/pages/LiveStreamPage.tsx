@@ -31,7 +31,7 @@ const LiveStreamPage = () => {
   const platform = 'youtube' as const;
   
   const [isNotificationEnabled, setIsNotificationEnabled] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'about'>('upcoming');
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'about' | 'past-streams'>('upcoming');
   const [pastStreams, setPastStreams] = useState<PastStream[]>([]); // Placeholder for past streams
   const [useRealChat, setUseRealChat] = useState(true); // State to toggle real YouTube chat
 
