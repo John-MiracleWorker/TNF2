@@ -9,7 +9,8 @@ import {
   Download, 
   Trash2, 
   Copy, 
-  CheckCircle,
+  Sparkles, // Import Sparkles icon
+ CheckCircle,
   FileAudio,
   FileVideo,
   CalendarClock,
@@ -116,6 +117,11 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
     }
   };
   
+  const handleAnalyzeWithAI = () => {
+    console.log(`Analyzing sermon with ID: ${sermon.id}`);
+    // TODO: Implement AI analysis logic here
+  };
+
   const handleDelete = async () => {
     if (!sermon.id) return;
     
@@ -164,6 +170,16 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
             <CardTitle className="text-2xl">{sermon.title}</CardTitle>
             
             <div className="flex space-x-2">
+              {/* Analyze with AI Button */}
+              <Button
+                variant="secondary" // Use secondary variant for prominence
+                size="sm"
+                onClick={handleAnalyzeWithAI}
+                disabled={processing} // Disable if processing is ongoing
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Analyze with AI
+              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
