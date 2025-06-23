@@ -10,7 +10,6 @@ import {
   Trash2, 
   Copy, 
   Sparkles, // Import Sparkles icon
- CheckCircle,
   FileAudio,
   FileVideo,
   CalendarClock,
@@ -43,7 +42,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/components/ui/use-toast'; // Use shadcn/ui toast
+import { useSession } from '@/hooks/useSession'; // Assuming you have this hook
+
 import { SermonSummary } from '@/lib/types';
 import { deleteSermonSummary, getSermonProcessingStatus } from '@/lib/sermons';
 
@@ -56,8 +57,12 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [processing, setProcessing] = useState<boolean>(false);
-  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null); // Status message from backend
+  const [analysisError, setAnalysisError] = useState<string | null>(null); // To display analysis errors
+  
+  // New state for AI analysis
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null); // Store AI analysis results here
   
   useEffect(() => {
     // Check if sermon is still processing
@@ -68,6 +73,18 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
       setProcessing(false);
     }
   }, [sermon]);
+
+  useEffect(() => {
+    // Initialize AI analysis results if sermon already has them
+    if (sermon.summary_text || sermon.follow_up_questions) {
+      setAiAnalysisResult({
+        summary: sermon.summary_text,
+        followUpQuestions: sermon.follow_up_questions,
+      });
+    }
+  }, [sermon]);
+
+  const { session } = useSession(); // Get the session from your hook
   
   const startStatusPolling = async () => {
     if (!sermon.id) return;
@@ -117,9 +134,66 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
     }
   };
   
-  const handleAnalyzeWithAI = () => {
+  const handleAnalyzeWithAI = async () => {
     console.log(`Analyzing sermon with ID: ${sermon.id}`);
-    // TODO: Implement AI analysis logic here
+    
+    if (!sermon.id) {
+      toast({
+        title: 'Error',
+        description: 'Cannot analyze sermon without an ID.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisError(null); // Clear previous errors
+    setProcessingStatus('Sending to AI for analysis...'); // Update status message
+
+    try {
+      const response = await fetch('/.netlify/functions/process-sermon', { // Use your actual endpoint
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`, // Include auth token
+        },
+        body: JSON.stringify({ sermon_id: sermon.id }), // Send sermon ID
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to analyze sermon with AI');
+      }
+
+      setAiAnalysisResult(data); // Store the analysis results
+      setProcessingStatus('AI analysis complete!'); // Update status message
+
+      toast({
+        title: 'Analysis Complete',
+        description: 'AI analysis of the sermon is complete.',
+      });
+
+      // You might want to trigger a refresh or update the local 'sermon' state here
+      // if the parent doesn't automatically update based on DB changes.
+
+    } catch (error: any) {
+      console.error('Error analyzing sermon with AI:', error);
+      const errorMessage = error.message || 'Failed to analyze sermon with AI.';
+      setProcessingStatus(`AI analysis failed: ${errorMessage}`); // Update status message
+      setAnalysisError(errorMessage); // Set analysis error state
+      toast({
+        title: 'Analysis Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAnalyzing(false);
+      // If processing is truly finished (not just analysis starting), clear status after a delay
+      if (aiAnalysisResult || processingStatus?.startsWith('AI analysis failed')) {
+         setTimeout(() => setProcessingStatus(null), 5000); // Clear status after 5 seconds
+      }
+    }
   };
 
   const handleDelete = async () => {
@@ -175,7 +249,7 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                 variant="secondary" // Use secondary variant for prominence
                 size="sm"
                 onClick={handleAnalyzeWithAI}
-                disabled={processing} // Disable if processing is ongoing
+                disabled={processing || isAnalyzing} // Disable if processing or analyzing is ongoing
               >
                 <Sparkles className="h-4 w-4 mr-2" />
                 Analyze with AI
@@ -253,8 +327,8 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
         
         <CardContent className="space-y-6">
           {/* Processing Status */}
-          {processing && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 dark:bg-blue-950/30 dark:border-blue-900">
+          {(processing || isAnalyzing) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 dark:bg-blue-950/30 dark:border-blue-900">
               <div className="flex items-center">
                 <Loader2 className="h-4 w-4 text-blue-500 animate-spin mr-2" />
                 <p className="text-blue-700 dark:text-blue-300">
@@ -264,8 +338,18 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
             </div>
           )}
           
-          {/* Summary */}
-          {sermon.summary_text ? (
+          {/* Analysis Error */}
+          {analysisError && (
+             <div className="bg-red-50 border border-red-200 rounded-lg p-3 dark:bg-red-950/30 dark:border-red-900">
+               <p className="text-red-700 dark:text-red-300">
+                 Analysis Error: {analysisError}
+               </p>
+             </div>
+          )}
+
+
+          {/* AI Analysis Results (Summary and Questions) */}
+          {sermon.summary_text || aiAnalysisResult?.summary ? (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium flex items-center">
@@ -276,7 +360,7 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleCopyToClipboard(sermon.summary_text!, 'Summary')}
+                  onClick={() => handleCopyToClipboard(aiAnalysisResult?.summary || sermon.summary_text!, 'Summary')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
@@ -284,7 +368,7 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
               </div>
               
               <div className="prose dark:prose-invert max-w-none text-foreground/80">
-                <p>{sermon.summary_text}</p>
+                <p>{aiAnalysisResult?.summary || sermon.summary_text}</p>
               </div>
             </div>
           ) : !processing ? (
@@ -295,8 +379,8 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
             </div>
           ) : null}
           
-          {/* Key Points */}
-          {sermon.ai_context?.key_points && sermon.ai_context.key_points.length > 0 && (
+          {/* AI Key Points */}
+          {(aiAnalysisResult?.key_points && aiAnalysisResult.key_points.length > 0) || (sermon.ai_context?.key_points && sermon.ai_context.key_points.length > 0) && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium flex items-center">
@@ -307,16 +391,16 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleCopyToClipboard(sermon.ai_context?.key_points!.join('\n- '), 'Key Points')}
+                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.key_points || sermon.ai_context?.key_points || []).join('\n- '), 'Key Points')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
                 </Button>
               </div>
               
-              <div className="bg-muted/30 rounded-lg p-4">
+              <div className="bg-muted/30 rounded-lg p-3">
                 <ul className="space-y-2">
-                  {sermon.ai_context.key_points.map((point, index) => (
+                  {(aiAnalysisResult?.key_points || sermon.ai_context?.key_points!).map((point: string, index: number) => (
                     <li key={index} className="flex items-start">
                       <div className="bg-primary/10 text-primary rounded-full w-5 h-5 flex items-center justify-center mr-2 mt-0.5 shrink-0">
                         {index + 1}
@@ -329,8 +413,8 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
             </div>
           )}
           
-          {/* Discussion Questions */}
-          {sermon.follow_up_questions && sermon.follow_up_questions.length > 0 && (
+          {/* AI Discussion Questions */}
+          {(aiAnalysisResult?.followUpQuestions && aiAnalysisResult.followUpQuestions.length > 0) || (sermon.follow_up_questions && sermon.follow_up_questions.length > 0) && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium flex items-center">
@@ -341,16 +425,16 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleCopyToClipboard(sermon.follow_up_questions!.join('\n- '), 'Questions')}
+                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.followUpQuestions || sermon.follow_up_questions || []).join('\n- '), 'Questions')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
                 </Button>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {sermon.follow_up_questions.map((question, index) => (
-                  <div key={index} className="bg-secondary/10 rounded-lg p-4">
+                  <div key={index} className="bg-secondary/10 rounded-lg p-3 text-sm">
                     <div className="flex items-start">
                       <div className="bg-secondary/20 text-secondary rounded-full w-5 h-5 flex items-center justify-center mr-2 mt-0.5 shrink-0">
                         {index + 1}
