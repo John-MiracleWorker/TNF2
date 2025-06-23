@@ -52,7 +52,7 @@ export function PastStreamItem({ stream }: PastStreamItemProps) {
     }
 
     try {
-      const response = await fetch('/.netlify/functions/process-sermon', { // Use your actual endpoint
+      const response = await fetch(`https://qkgtlxhuvuongwdzyizl.supabase.co/functions/v1/process-sermon`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
