@@ -43,7 +43,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast'; // Use shadcn/ui toast
-import { useSession } from '@/hooks/useSession'; // Assuming you have this hook
+import { supabase } from '@/lib/supabase';
 
 import { SermonSummary } from '@/lib/types';
 import { deleteSermonSummary, getSermonProcessingStatus } from '@/lib/sermons';
@@ -84,7 +84,6 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
     }
   }, [sermon]);
 
-  const { session } = useSession(); // Get the session from your hook
   
   const startStatusPolling = async () => {
     if (!sermon.id) return;
@@ -150,14 +149,22 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
     setAnalysisError(null); // Clear previous errors
     setProcessingStatus('Sending to AI for analysis...'); // Update status message
 
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      toast({ title: 'Error', description: 'You must be logged in to analyze sermons.', variant: 'destructive' });
+      setIsAnalyzing(false);
+      return;
+    }
+
     try {
       const response = await fetch('/.netlify/functions/process-sermon', { // Use your actual endpoint
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`, // Include auth token
+          'Authorization': `Bearer ${session.access_token}`, // Include auth token
         },
-        body: JSON.stringify({ sermon_id: sermon.id }), // Send sermon ID
+        body: JSON.stringify({ sermon_id: sermon.id }), // Send sermon ID (file_path is optional now)
       });
 
       const data = await response.json();
