@@ -17,7 +17,7 @@ interface PastStreamItemProps {
   stream: PastStream;
 }
 
-const PastStreamItem: React.FC<PastStreamItemProps> = ({ stream }) => {
+export function PastStreamItem({ stream }: PastStreamItemProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<SermonSummary | null>(null); // Use SermonSummary type
 
