@@ -62,18 +62,26 @@ const LiveStreamPage = () => {
 
   // Placeholder for fetching past streams from YouTube Data API
   // In a real application, you would fetch the API key from Supabase
-  // and make API calls here.
+  // or use a secure backend function like we're implementing now.
   useEffect(() => {
     const fetchPastStreams = async () => {
-      // Replace with actual API fetching logic using YouTube Data API
-      // and your Supabase stored API key
       console.log('Fetching past streams for channel:', channelId);
-      // Example placeholder data:
-      const dummyPastStreams: PastStream[] = [
-        { id: 'past1', title: 'Archived Service 1', description: 'A recording of a previous service.', publishedAt: new Date('2023-10-20T10:00:00Z'), thumbnail: 'https://images.pexels.com/photos/1112048/pexels-photo-1112048.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-        { id: 'past2', title: 'Archived Bible Study', description: 'Previous week\'s Bible study session.', publishedAt: new Date('2023-10-18T19:00:00Z'), thumbnail: 'https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-      ];
-      setPastStreams(dummyPastStreams);
+      try {
+        const response = await fetch('/.netlify/functions/get-past-videos', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ channelId }),
+        });
+
+        const data = await response.json();
+        if (data && data.videos) {
+          setPastStreams(data.videos);
+        }
+      } catch (error) {
+        console.error('Error fetching past streams:', error);
+      }
     };
 
     fetchPastStreams();
