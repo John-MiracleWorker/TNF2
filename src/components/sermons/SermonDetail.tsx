@@ -42,7 +42,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { toast } from '@/components/ui/use-toast'; // Use shadcn/ui toast
+import { toast } from '@/hooks/use-toast'; // Use shadcn/ui toast
 import { useSession } from '@/hooks/useSession'; // Assuming you have this hook
 
 import { SermonSummary } from '@/lib/types';
