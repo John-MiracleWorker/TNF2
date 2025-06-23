@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Wifi, Calendar, MessageSquare, Bell, Share, ThumbsUp, Info, Video } from 'lucide-react';
+import { Wifi, Calendar, MessageSquare, Bell, Share, ThumbsUp, Info, Video, Sparkles } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { LiveStreamPlayer } from '@/components/livestream/LiveStreamPlayer';
 import { LiveChat } from '@/components/livestream/LiveChat';
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { PastStreamItem } from '@/components/livestream/PastStreamItem'; // Import the new component
 import { format, addHours } from 'date-fns';
 
 interface UpcomingStream {
@@ -17,7 +18,7 @@ interface UpcomingStream {
   thumbnail?: string;
 }
 
-interface PastStream {
+export interface PastStream { // Export PastStream type
   id: string;
   title: string;
   description: string;
@@ -229,35 +230,7 @@ const LiveStreamPage = () => {
 
  <TabsContent value="past-streams" className="mt-0 space-y-4">
  <h2 className="text-2xl font-bold mb-4">Past Streams</h2>
-                    {pastStreams.map((stream) => (
- <div key={stream.id} className="flex gap-4 border-b pb-4 last:border-0 last:pb-0">
- {stream.thumbnail && (
- <div className="w-32 h-20 rounded-md overflow-hidden shrink-0 hidden sm:block">
- <img
- src={stream.thumbnail}
- alt={stream.title}
- className="w-full h-full object-cover"
- />
- </div>
- )}
- <div className="flex-grow">
- <h3 className="font-medium text-foreground">{stream.title}</h3>
- <p className="text-muted-foreground text-sm line-clamp-2 mt-1">{stream.description}</p>
- <div className="flex items-center mt-2">
- <Calendar className="h-3.5 w-3.5 text-muted-foreground mr-1" />
- <span className="text-xs text-muted-foreground">
- {format(stream.publishedAt, 'MMM d, yyyy')}
- </span>
- </div>
- </div>
-                        <div className="shrink-0">
- <Button variant="outline" size="sm" onClick={() => window.open(`https://www.youtube.com/watch?v=${stream.id}`, '_blank')}>
- <Video className="h-4 w-4 mr-2" />
- Watch Again
- </Button>
- </div>
-                      </div>
- ))}
+                    {pastStreams.map((stream) => (<PastStreamItem key={stream.id} stream={stream} />))} {/* Use the new component */}
  </TabsContent>
                   
                   <TabsContent value="about" className="mt-0">
