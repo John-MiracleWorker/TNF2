@@ -8,10 +8,10 @@ serve(async (req) => {
   try {
     // Handle preflight CORS
     if (req.method === 'OPTIONS') {
-      return new Response('ok', {
+      return new Response("ok", {
         headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+ 'Access-Control-Allow-Origin': 'https://find-true-north.net',
+          'Access-Control-Allow-Methods': "POST, OPTIONS",
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           'Access-Control-Max-Age': '86400'
         }
@@ -22,7 +22,13 @@ serve(async (req) => {
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: 'Method not allowed' }), 
-        { status: 405, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: 405,
+          headers: {
+          'Content-Type': 'application/json',
+ 'Access-Control-Allow-Origin': 'https://find-true-north.net'
+          },
+        }
       );
     }
     
@@ -31,8 +37,15 @@ serve(async (req) => {
     
     if (!sermon_id || !file_path) {
       return new Response(
-        JSON.stringify({ error: 'Missing required parameters: sermon_id and file_path are required' }), 
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: "Missing required parameters: sermon_id and file_path are required",
+        }),
+        {
+          status: 400,
+          headers: {
+          'Content-Type': 'application/json',
+ 'Access-Control-Allow-Origin': 'https://find-true-north.net'
+        } }
       );
     }
     
@@ -56,8 +69,7 @@ serve(async (req) => {
       
       if (error || !user) {
         return new Response(
-          JSON.stringify({ error: 'Invalid authentication' }), 
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: "Invalid authentication" }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://find-true-north.net' } }
         );
       }
       
@@ -73,8 +85,11 @@ serve(async (req) => {
       );
     } else {
       return new Response(
-        JSON.stringify({ error: 'Authentication required' }), 
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://find-true-north.net' },
+        }
       );
     }
     
@@ -87,15 +102,19 @@ serve(async (req) => {
       
     if (sermonError) {
       return new Response(
-        JSON.stringify({ error: `Sermon not found: ${sermonError.message}` }), 
-        { status: 404, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: `Sermon not found: ${sermonError.message}` }),
+
+        {
+          status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://find-true-north.net' },
+
+        }
       );
     }
     
     // Update processing status
     await supabaseAdmin
       .from('sermon_summaries')
-      .update({ ai_context: { status: 'processing_started', step: 'started' } })
+      .update({ ai_context: { status: "processing_started", step: "started" } })
       .eq('id', sermon_id);
     
     // Download the audio/video file from Storage
@@ -107,20 +126,30 @@ serve(async (req) => {
     if (fileError || !fileData) {
       await supabaseAdmin
         .from('sermon_summaries')
-        .update({ ai_context: { status: 'error', error: `File download failed: ${fileError?.message}` } })
+        .update({
+          ai_context: {
+            status: "error",
+            error: `File download failed: ${fileError?.message}`,
+          },
+        })
         .eq('id', sermon_id);
-        
+
       return new Response(
-        JSON.stringify({ error: `File download failed: ${fileError?.message}` }), 
-        { status: 404, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: `File download failed: ${fileError?.message}` }),
+
+        {
+          status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://find-true-north.net' },
+
+          headers: { "Content-Type": "application/json" },
+        }
       );
     }
-    
+
     // Update processing status
     await supabaseAdmin
-      .from('sermon_summaries')
-      .update({ ai_context: { status: 'processing', step: 'file_downloaded' } })
-      .eq('id', sermon_id);
+      .from("sermon_summaries")
+      .update({ ai_context: { status: "processing", step: "file_downloaded" } })
+      .eq("id", sermon_id);
     
     // Step 1: Transcribe audio using OpenAI Whisper API
     const formData = new FormData();
@@ -135,17 +164,36 @@ serve(async (req) => {
       body: formData
     });
     
-    if (!whisperResponse.ok) {
-      const errorText = await whisperResponse.text();
-      
+    if (!whisperResponse.ok) { // Moved the enhanced error handling here
+ let errorBody;
+      try {
+ errorBody = await whisperResponse.json(); // Try parsing as JSON
+      } catch {
+ errorBody = await whisperResponse.text(); // Fallback to text if JSON parsing fails
+      }
+
       await supabaseAdmin
         .from('sermon_summaries')
-        .update({ ai_context: { status: 'error', error: `Transcription failed: ${errorText}` } })
+        .update({
+          ai_context: {
+            status: "error",
+            error: `Transcription failed: ${
+              typeof errorBody === "object" ? JSON.stringify(errorBody) : errorBody
+            }`,
+          },
+        })
         .eq('id', sermon_id);
-        
+
       return new Response(
-        JSON.stringify({ error: `Transcription failed: ${errorText}` }), 
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: `Transcription failed: ${
+            typeof errorBody === "object" ? JSON.stringify(errorBody) : errorBody
+          }`,
+        }),
+        {
+          status: whisperResponse.status, // Use the actual status code
+          headers: { "Content-Type": "application/json" },
+        }
       );
     }
     
@@ -157,7 +205,7 @@ serve(async (req) => {
       .from('sermon_summaries')
       .update({ 
         transcription_text: transcriptionText,
-        ai_context: { status: 'processing', step: 'transcription_completed' } 
+        ai_context: { status: "processing", step: "transcription_completed" }
       })
       .eq('id', sermon_id);
     
@@ -173,7 +221,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You are a theological assistant analyzing sermon transcripts. Create a well-structured response with three components: 1) A concise summary of the sermon (300-500 words), 2) Five key theological points or takeaways, and 3) Eight thought-provoking follow-up questions that would facilitate deeper discussion of the sermon\'s content. Format your response as JSON with keys "summary", "keyPoints", and "followUpQuestions".'
+            content: 'You are a theological assistant analyzing sermon transcripts. Create a well-structured JSON response with the following keys: "summary" (a concise summary of the sermon, 300-500 words), "keyPoints" (five key theological points or takeaways), "applicationToFaith" (how the sermon applies to a user's daily faith walk), "biblicalThemes" (a list of core biblical themes discussed), "biblicalCharacters" (a list of biblical characters mentioned), "historicalContext" (any relevant historical context discussed), and "followUpQuestions" (eight thought-provoking follow-up questions for deeper discussion).'
           },
           {
             role: 'user',
@@ -185,45 +233,87 @@ serve(async (req) => {
     });
     
     if (!gptResponse.ok) {
-      const errorText = await gptResponse.text();
-      
+ let errorBody;
+      try {
+ errorBody = await gptResponse.json(); // Try parsing as JSON
+      } catch {
+ errorBody = await gptResponse.text(); // Fallback to text if JSON parsing fails
+      }
+
       await supabaseAdmin
         .from('sermon_summaries')
-        .update({ ai_context: { status: 'error', error: `AI analysis failed: ${errorText}` } })
+        .update({
+          ai_context: {
+            status: "error",
+            error: `AI analysis failed: ${
+              typeof errorBody === "object" ? JSON.stringify(errorBody) : errorBody
+            }`,
+          },
+        })
         .eq('id', sermon_id);
-        
+
       return new Response(
-        JSON.stringify({ error: `AI analysis failed: ${errorText}` }), 
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: `AI analysis failed: ${
+            typeof errorBody === "object" ? JSON.stringify(errorBody) : errorBody
+          }`,
+        }),
+        {
+          status: gptResponse.status, // Use the actual status code
+          headers: { "Content-Type": "application/json" },
+        }
       );
     }
     
     const gptResult = await gptResponse.json();
     const analysisContent = JSON.parse(gptResult.choices[0].message.content);
     
-    // Extract the summary and questions from the AI response
+    // Extract the analysis results from the AI response
     const summaryText = analysisContent.summary;
-    const followUpQuestions = analysisContent.followUpQuestions;
-    const keyPoints = analysisContent.keyPoints;
+    const keyPoints = Array.isArray(analysisContent.keyPoints) ? analysisContent.keyPoints : [];
+    const applicationToFaith = analysisContent.applicationToFaith || '';
+    const biblicalThemes = Array.isArray(analysisContent.biblicalThemes) ? analysisContent.biblicalThemes : [];
+    const biblicalCharacters = Array.isArray(analysisContent.biblicalCharacters) ? analysisContent.biblicalCharacters : [];
+    const historicalContext = analysisContent.historicalContext || '';
+    let followUpQuestions;
+    if (Array.isArray(analysisContent.followUpQuestions)) {
+ followUpQuestions = analysisContent.followUpQuestions;
+    } else if (typeof analysisContent.followUpQuestions === 'string') {
+ // If it's a string, try to parse it as a JSON array
+      try {
+ followUpQuestions = JSON.parse(analysisContent.followUpQuestions);
+      } catch (e) {
+        console.error('Failed to parse followUpQuestions string:', analysisContent.followUpQuestions, e);
+ followUpQuestions = []; // Default to empty array on error
+      }
+    } else {
+ followUpQuestions = []; // Default to empty array if not array or string
+    }
+
     
     // Step 3: Save the analysis results to the database
     const { error: updateError } = await supabaseAdmin
       .from('sermon_summaries')
       .update({
         summary_text: summaryText,
+        key_points: keyPoints, // Now a direct field
+        application_to_faith: applicationToFaith,
+        biblical_themes: biblicalThemes,
+        biblical_characters: biblicalCharacters,
+        historical_context: historicalContext,
         follow_up_questions: followUpQuestions,
         ai_context: { 
           status: 'completed', 
-          key_points: keyPoints,
           completed_at: new Date().toISOString()
-        }
+        } // Removed key_points from here
       })
       .eq('id', sermon_id);
     
     if (updateError) {
       return new Response(
-        JSON.stringify({ error: `Failed to update sermon with analysis: ${updateError.message}` }), 
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: `Failed to update sermon with analysis: ${updateError.message}` }),
+
+        { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://find-true-north.net' } }
       );
     }
     
@@ -233,10 +323,16 @@ serve(async (req) => {
         success: true,
         sermon_id,
         summary: summaryText,
+        key_points: keyPoints,
+        application_to_faith: applicationToFaith,
+        biblical_themes: biblicalThemes,
+        biblical_characters: biblicalCharacters,
+        historical_context: historicalContext,
         questions: followUpQuestions,
-        key_points: keyPoints
       }), 
-      { headers: { 'Content-Type': 'application/json' } }
+      {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://find-true-north.net' },
+      }
     );
     
   } catch (error) {
@@ -244,7 +340,8 @@ serve(async (req) => {
     
     return new Response(
       JSON.stringify({ error: `Server error: ${error.message}` }), 
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://find-true-north.net' }
+      }
     );
   }
 });

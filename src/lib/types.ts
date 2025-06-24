@@ -342,11 +342,15 @@ export interface SermonSummary {
   video_url?: string;
   transcription_text?: string;
   summary_text?: string;
+  key_points?: string[]; // Moved out of ai_context
+  application_to_faith?: string; // New field
+  biblical_themes?: string[]; // New field
+  biblical_characters?: string[]; // New field
+  historical_context?: string; // New field
   follow_up_questions?: string[];
   ai_context?: {
     status?: 'processing_started' | 'processing' | 'completed' | 'error';
     step?: string;
-    key_points?: string[];
     error?: string;
     completed_at?: string;
   };
