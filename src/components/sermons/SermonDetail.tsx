@@ -145,6 +145,17 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
       return;
     }
 
+    // Ensure audio_url or video_url is available to pass as file_path
+    const filePath = sermon.audio_url || sermon.video_url; 
+    if (!filePath) {
+      toast({
+        title: 'Error',
+        description: 'Cannot analyze sermon: Audio or video file URL is not available.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsAnalyzing(true);
     setAnalysisError(null); // Clear previous errors
     setProcessingStatus('Sending to AI for analysis...'); // Update status message
@@ -164,7 +175,7 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`, // Include auth token
         },
-        body: JSON.stringify({ sermon_id: sermon.id }), // Send sermon ID (file_path is optional now)
+        body: JSON.stringify({ sermon_id: sermon.id, file_path: filePath }), // Send sermon ID and file_path
       });
 
       const data = await response.json();
@@ -398,7 +409,8 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.key_points || sermon.ai_context?.key_points || []).join('\n- '), 'Key Points')}
+                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.key_points || sermon.ai_context?.key_points || []).join('
+- '), 'Key Points')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
@@ -432,7 +444,8 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.followUpQuestions || sermon.follow_up_questions || []).join('\n- '), 'Questions')}
+                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.followUpQuestions || sermon.follow_up_questions || []).join('
+- '), 'Questions')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
