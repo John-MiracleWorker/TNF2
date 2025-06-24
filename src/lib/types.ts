@@ -46,7 +46,7 @@ export interface UserPreferences {
     bible_reading: boolean;
     journal_prompts: boolean;
     frequency?: 'daily' | 'weekly' | 'monthly' | 'custom';
-    custom_days?: string[]; // Days of week when using 'custom' (e.g., ['monday', 'wednesday', 'friday'])
+    custom_days?: string[]; // Days of week when using 'custom' (e.g., ['monday', 'wednesday', 'monday'])
     quiet_hours?: {
       enabled: boolean;
       start: string; // HH:MM format
@@ -340,13 +340,14 @@ export interface SermonSummary {
   sermon_date?: string;
   audio_url?: string;
   video_url?: string;
+  storage_file_path?: string; // New field for internal Supabase storage path
   transcription_text?: string;
   summary_text?: string;
-  key_points?: string[]; // Moved out of ai_context
-  application_to_faith?: string; // New field
-  biblical_themes?: string[]; // New field
-  biblical_characters?: string[]; // New field
-  historical_context?: string; // New field
+  key_points?: string[];
+  application_to_faith?: string;
+  biblical_themes?: string[];
+  biblical_characters?: string[];
+  historical_context?: string;
   follow_up_questions?: string[];
   ai_context?: {
     status?: 'processing_started' | 'processing' | 'completed' | 'error';

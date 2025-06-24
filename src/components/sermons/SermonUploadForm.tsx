@@ -84,6 +84,7 @@ export function SermonUploadForm({ onUploadComplete }: SermonUploadFormProps) {
     
     try {
       // Step 1: Create an entry in the sermon_summaries table
+      // This sermon object will be updated later with file URLs and analysis results
       const sermon: SermonSummary = {
         title,
         description,
@@ -129,10 +130,11 @@ export function SermonUploadForm({ onUploadComplete }: SermonUploadFormProps) {
       
       const fileUrl = urlData.publicUrl;
       
-      // Update the sermon record with the file URL
+      // Update the sermon record with the file URL and storage path
       const fileType = selectedFile.type.startsWith('audio/') ? 'audio' : 'video';
       
       const updateData: Partial<SermonSummary> = {
+        storage_file_path: filePath, // Save the internal storage path
         ai_context: {
           status: 'processing_started',
           step: 'file_uploaded',
@@ -169,7 +171,13 @@ export function SermonUploadForm({ onUploadComplete }: SermonUploadFormProps) {
       });
       
       if (onUploadComplete) {
-        onUploadComplete(savedSermon);
+        // Re-fetch the sermon to get the latest updated data, including potential AI analysis if polling is quick
+        const updatedSermon = await supabase.from('sermon_summaries').select('*').eq('id', savedSermon.id).single();
+        if (updatedSermon.data) {
+            onUploadComplete(updatedSermon.data as SermonSummary);
+        } else {
+            onUploadComplete(savedSermon);
+        }
       }
       
       // Reset form
@@ -197,7 +205,13 @@ export function SermonUploadForm({ onUploadComplete }: SermonUploadFormProps) {
   
   const pollProcessingStatus = async (sermonId: string) => {
     try {
-      const status = await getSermonProcessingStatus(sermonId);
+      const { data: statusData, error: statusError } = await getSermonProcessingStatus(sermonId);
+      
+      if (statusError) {
+        throw statusError;
+      }
+
+      const status = statusData; // ai_context is returned directly now
       
       if (status?.status === 'completed') {
         setProcessingStatus('Processing complete!');
@@ -206,12 +220,20 @@ export function SermonUploadForm({ onUploadComplete }: SermonUploadFormProps) {
         setTimeout(() => {
           setProcessingStatus(null);
           setCurrentSermonId(null);
-        }, 5000);
+          loadSermons(); // Reload sermons to reflect updated status in the list
+        }, 3000);
         
         return;
       } else if (status?.status === 'error') {
         setProcessingStatus(`Error: ${status.error || 'Unknown error'}`);
         setError(status.error || 'Processing failed');
+        
+        // Stop polling on error
+        setTimeout(() => {
+          setProcessingStatus(null);
+          setCurrentSermonId(null);
+          loadSermons(); // Reload sermons to reflect updated status in the list
+        }, 5000);
         
         return;
       } else if (status?.step) {
@@ -245,7 +267,58 @@ export function SermonUploadForm({ onUploadComplete }: SermonUploadFormProps) {
       setError('Failed to check processing status');
     }
   };
-  
+
+  // This function is for SermonList to trigger re-analysis
+  const handleReanalyze = async (sermon: SermonSummary) => {
+    if (!sermon.id || !sermon.storage_file_path) {
+      toast({
+        title: 'Cannot Re-analyze',
+        description: 'Sermon ID or file path is missing.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Set processing status for the specific sermon being re-analyzed
+    setSermons(prevSermons => 
+        prevSermons.map(s => 
+            s.id === sermon.id 
+                ? { ...s, ai_context: { status: 'processing_started', step: 'reanalyzing' } } 
+                : s
+        )
+    );
+
+    try {
+      toast({
+        title: 'Re-analysis Started',
+        description: `Re-processing sermon: ${sermon.title}`,
+      });
+      await processSermon(sermon.id, sermon.storage_file_path);
+      // Start polling for this specific sermon
+      pollProcessingStatus(sermon.id);
+    } catch (error) {
+      console.error('Error re-analyzing sermon:', error);
+      toast({
+        title: 'Re-analysis Failed',
+        description: error.message || 'Failed to re-analyze sermon',
+        variant: 'destructive',
+      });
+       // Revert status on error
+      setSermons(prevSermons => 
+        prevSermons.map(s => 
+            s.id === sermon.id 
+                ? { ...s, ai_context: { status: 'error', error: error.message || 'Re-analysis failed' } } 
+                : s
+        )
+      );
+    }
+  };
+
+  // Expose handleReanalyze to SermonList component
+  // This would typically be passed down via props or context
+  // For now, it's just here to demonstrate the function.
+  // A more robust solution would involve a shared state or context.
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">

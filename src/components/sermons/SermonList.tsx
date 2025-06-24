@@ -11,7 +11,8 @@ import {
   FileVideo,
   CheckCircle,
   Clock,
-  Sparkles
+  Sparkles,
+  RefreshCcw // New icon for re-analyze
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { SermonSummary } from '@/lib/types';
-import { getSermonSummaries } from '@/lib/sermons';
+import { getSermonSummaries, processSermon, getSermonProcessingStatus } from '@/lib/sermons';
 
 interface SermonListProps {
   onSelectSermon: (sermon: SermonSummary) => void;
@@ -38,6 +39,7 @@ export function SermonList({ onSelectSermon }: SermonListProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [processingSermons, setProcessingSermons] = useState<Set<string>>(new Set()); // Track sermons currently being processed
   const { toast } = useToast();
   
   useEffect(() => {
@@ -55,6 +57,14 @@ export function SermonList({ onSelectSermon }: SermonListProps) {
       const data = await getSermonSummaries();
       setSermons(data);
       setFilteredSermons(data);
+
+      // Re-poll status for any sermon that was previously marked as processing
+      data.forEach(sermon => {
+        if (sermon.ai_context?.status === 'processing') {
+          pollProcessingStatus(sermon.id!); 
+        }
+      });
+
     } catch (error) {
       console.error('Error loading sermons:', error);
       toast({
@@ -131,6 +141,146 @@ export function SermonList({ onSelectSermon }: SermonListProps) {
       icon: Clock
     };
   };
+
+  const pollProcessingStatus = async (sermonId: string) => {
+    if (processingSermons.has(sermonId)) {
+      // Already polling this sermon
+      return;
+    }
+
+    setProcessingSermons(prev => new Set(prev).add(sermonId));
+
+    const checkStatus = async () => {
+      try {
+        const { data: statusData, error: statusError } = await getSermonProcessingStatus(sermonId);
+        
+        if (statusError) {
+          throw statusError;
+        }
+  
+        const status = statusData; // ai_context is returned directly now
+        
+        if (status?.status === 'completed') {
+          toast({
+            title: 'Analysis Complete',
+            description: `Sermon analysis for ${sermonId} is complete!`,
+          });
+          // Remove from processing set and reload sermons
+          setProcessingSermons(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(sermonId);
+            return newSet;
+          });
+          loadSermons(); 
+          return;
+        } else if (status?.status === 'error') {
+          toast({
+            title: 'Analysis Failed',
+            description: `Sermon analysis for ${sermonId} failed: ${status.error || 'Unknown error'}`,
+            variant: 'destructive',
+          });
+          // Remove from processing set and reload sermons
+          setProcessingSermons(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(sermonId);
+            return newSet;
+          });
+          loadSermons();
+          return;
+        } else { // Still processing
+          // Update the specific sermon's status in the list without full reload
+          setSermons(prevSermons => 
+            prevSermons.map(s => 
+              s.id === sermonId 
+                ? { ...s, ai_context: { ...s.ai_context, status: 'processing', step: status?.step || '' } } 
+                : s
+            )
+          );
+        }
+        
+        // Continue polling
+        setTimeout(checkStatus, 5000); // Poll every 5 seconds
+
+      } catch (error) {
+        console.error(`Error polling status for ${sermonId}:`, error);
+        toast({
+          title: 'Polling Error',
+          description: `Failed to check status for sermon ${sermonId}`,
+          variant: 'destructive',
+        });
+        // Remove from processing set on polling error
+        setProcessingSermons(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(sermonId);
+            return newSet;
+        });
+        loadSermons(); // Reload to show potential error status
+      }
+    };
+
+    setTimeout(checkStatus, 1000); // Start polling after 1 second
+  };
+
+  const handleReanalyze = async (sermon: SermonSummary) => {
+    if (!sermon.id || !sermon.storage_file_path) {
+      toast({
+        title: 'Cannot Re-analyze',
+        description: 'Sermon ID or stored file path is missing.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Prevent re-triggering if already processing
+    if (processingSermons.has(sermon.id)) {
+      toast({
+        title: 'Already Processing',
+        description: 'This sermon is already being re-analyzed.',
+        variant: 'default',
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: 'Re-analysis Initiated',
+        description: `Re-processing sermon: ${sermon.title}. Please wait...`,
+      });
+      
+      // Optimistically update the UI to show processing
+      setSermons(prevSermons => 
+        prevSermons.map(s => 
+            s.id === sermon.id 
+                ? { ...s, ai_context: { status: 'processing', step: 'reanalyzing' } } 
+                : s
+        )
+      );
+      setProcessingSermons(prev => new Set(prev).add(sermon.id!));
+
+      // Call the process function
+      await processSermon(sermon.id, sermon.storage_file_path);
+      
+      // Start polling for the status of this specific sermon
+      pollProcessingStatus(sermon.id);
+
+    } catch (error) {
+      console.error('Error re-analyzing sermon:', error);
+      toast({
+        title: 'Re-analysis Failed',
+        description: error.message || 'Failed to re-analyze sermon.',
+        variant: 'destructive',
+      });
+       // Revert status on error
+      setSermons(prevSermons => 
+        prevSermons.map(s => 
+            s.id === sermon.id 
+                ? { ...s, ai_context: { status: 'error', error: error.message || 'Re-analysis failed' } } 
+                : s
+        )
+      );
+      setProcessingSermons(prev => { const newSet = new Set(prev); newSet.delete(sermon.id!); return newSet; });
+    }
+  };
   
   return (
     <div className="space-y-4">
@@ -175,28 +325,55 @@ export function SermonList({ onSelectSermon }: SermonListProps) {
           {filteredSermons.map(sermon => {
             const status = getSermonStatus(sermon);
             const StatusIcon = status.icon;
+            const isSermonProcessing = processingSermons.has(sermon.id!);
             
             return (
               <Card 
                 key={sermon.id}
                 className="cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => onSelectSermon(sermon)}
               >
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
-                    <CardTitle className="text-xl">{sermon.title}</CardTitle>
+                    <CardTitle 
+                      className="text-xl flex-grow" 
+                      onClick={() => onSelectSermon(sermon)}
+                    >
+                      {sermon.title}
+                    </CardTitle>
                     
-                    <Badge variant="outline" className={`${status.color} ${status.label === 'Processing' ? 'animate-pulse' : ''}`}>
-                      <StatusIcon className={`h-3 w-3 mr-1 ${status.label === 'Processing' ? 'animate-spin' : ''}`} />
-                      {status.label}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={`${status.color} ${status.label === 'Processing' ? 'animate-pulse' : ''}`}>
+                        <StatusIcon className={`h-3 w-3 mr-1 ${status.label === 'Processing' ? 'animate-spin' : ''}`} />
+                        {status.label}
+                      </Badge>
+                      
+                      {/* Re-analyze Button */}
+                      {sermon.storage_file_path && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent card click event
+                            handleReanalyze(sermon);
+                          }}
+                          disabled={isSermonProcessing} // Disable if already processing
+                          title={isSermonProcessing ? "Sermon is being processed" : "Re-analyze sermon with AI"}
+                        >
+                          {isSermonProcessing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCcw className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {sermon.description && (
                     <CardDescription>{sermon.description}</CardDescription>
                   )}
                 </CardHeader>
                 
-                <CardContent>
+                <CardContent onClick={() => onSelectSermon(sermon)}>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {sermon.sermon_date && (
                       <Badge variant="outline" className="bg-muted/50 flex items-center gap-1">

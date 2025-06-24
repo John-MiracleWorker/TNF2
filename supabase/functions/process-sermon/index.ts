@@ -33,12 +33,15 @@ serve(async (req) => {
     }
     
     // Parse request body
-    const { sermon_id, file_path } = await req.json();
+    const requestBody = await req.json();
+    console.log('Received request body:', requestBody); // Add this log
+    const { sermon_id, file_path } = requestBody; // Use the parsed body
     
     if (!sermon_id || !file_path) {
       return new Response(
         JSON.stringify({
           error: "Missing required parameters: sermon_id and file_path are required",
+          received_body: requestBody // Include the received body in the error for debugging
         }),
         {
           status: 400,
