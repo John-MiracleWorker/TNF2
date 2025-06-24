@@ -484,7 +484,6 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleCopyToClipboard(sermon.transcription_text!, 'Transcription')}
                   >
                     <Copy className="h-4 w-4 mr-2" />
                     Copy
