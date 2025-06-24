@@ -74,18 +74,16 @@ self.addEventListener('fetch', event => {
         const fetchRequest = event.request.clone();
         
         return fetch(fetchRequest).then(response => {
-          // Skip caching if response is not valid
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
+          // Only cache successful GET requests
+          if (event.request.method === 'GET' && response.status === 200 && response.type === 'basic') {
+            // Clone the response as it's a one-time use stream
+            const responseToCache = response.clone();
+            
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                cache.put(event.request, responseToCache);
+              });
           }
-          
-          // Clone the response as it's a one-time use stream
-          const responseToCache = response.clone();
-          
-          caches.open(CACHE_NAME)
-            .then(cache => {
-              cache.put(event.request, responseToCache);
-            });
             
           return response;
         });
@@ -133,8 +131,8 @@ self.addEventListener('push', event => {
     event.waitUntil(
       self.registration.showNotification('TrueNorth Update', {
         body: 'You have a new notification',
-        icon: '/TrueNorth Compass Logo copy.png',
-        badge: '/TrueNorth Compass Logo copy.png'
+        icon: '/TrueNorth Compass Logo copy.0.png',
+        badge: '/TrueNorth Compass Logo copy.0.png'
       })
     );
   }
