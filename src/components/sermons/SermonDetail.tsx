@@ -409,7 +409,7 @@ export function SermonDetail({ sermon, onDelete }: SermonDetailProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.key_points || sermon.ai_context?.key_points || []).join('
+                  onClick={() => handleCopyToClipboard((aiAnalysisResult?.key_points || sermon.ai_context?.key_points || []).join('\n- '), 'Key Points')}
 - '), 'Key Points')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
