@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.1'
 import { ChatOpenAI } from 'https://esm.sh/langchain@0.1.23/chat_models/openai'
 import { PromptTemplate } from 'https://esm.sh/langchain@0.1.23/prompts'
 import { StringOutputParser } from 'https://esm.sh/langchain@0.1.23/schema/output_parser'
-import { RunnableSequence } from 'https://esm.sh/langchain@0.1.23/schema/runnable'
+import { RunnableSequence } from 'https://esm.sh/langchain@0.2.0/schema/runnable'; // Also updated langchain for potential compatibility
 
 // System message for the faith-centered AI
 const SYSTEM_TEMPLATE = `You are TrueNorth, a faith-centered AI life coach. Your purpose is to provide spiritual guidance, biblical insights, and practical advice to help users grow in their faith journey.
@@ -27,6 +27,7 @@ USER INFORMATION:
 Today's date is ${new Date().toLocaleDateString()}.
 
 Always respond in a way that encourages spiritual growth and a deeper relationship with God.`
+import { Client as LangsmithClient } from "https://esm.sh/langsmith@0.4.1";
 
 serve(async (req) => {
   try {
