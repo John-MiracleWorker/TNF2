@@ -33,6 +33,7 @@ serve(async (req) => {
     // Handle CORS preflight request
     if (req.method === 'OPTIONS') {
       return new Response('ok', {
+        status: 200,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
