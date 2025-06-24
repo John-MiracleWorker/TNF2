@@ -122,11 +122,44 @@ serve(async (req) => {
       .maybeSingle();
     
     if (existingSermon) {
+      // Trigger process-sermon again for existing sermons, in case it failed previously
+      console.log(`Retriggering processing for existing sermon ID: ${existingSermon.id}`);
+      const processSermonResponse = await fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-sermon`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` // Pass the user's token if available
+          },
+          body: JSON.stringify({
+            sermon_id: existingSermon.id,
+            // Simulating a file path for demonstration
+            file_path: `sermons/${existingSermon.id}.mp3`, 
+          }),
+        }
+      );
+
+      if (!processSermonResponse.ok) {
+        const errorText = await processSermonResponse.text();
+        console.error(`Failed to reprocess sermon ${existingSermon.id}:`, errorText);
+        return new Response(
+          JSON.stringify({ 
+            error: `Failed to reprocess existing sermon: ${errorText}`,
+            sermon_id: existingSermon.id
+          }), 
+          { status: processSermonResponse.status, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const processSermonResult = await processSermonResponse.json();
+
       return new Response(
         JSON.stringify({ 
-          message: 'This livestream has already been processed',
+          message: 'This livestream has already been processed, re-triggered analysis.',
           sermon_id: existingSermon.id,
-          title: existingSermon.title
+          title: existingSermon.title,
+          analysis_status: processSermonResult
         }), 
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       );
@@ -193,43 +226,58 @@ serve(async (req) => {
       );
     }
     
-    // Now we need to download the audio from the YouTube video and store it in Supabase Storage
-    // This requires using a service like ytdl, which we'll emulate here
-    
-    // For now, we'll simulate this by updating the record
-    await supabaseAdmin
-      .from('sermon_summaries')
-      .update({
-        ai_context: {
-          ...newSermon.ai_context,
-          status: 'processing',
-          step: 'downloading_audio',
-          message: 'Extracting audio from YouTube video'
-        }
-      })
-      .eq('id', newSermon.id);
-    
-    // Normally, we would now:
-    // 1. Download the YouTube video or extract its audio
-    // 2. Upload to Supabase Storage
-    // 3. Then call the process-sermon function
-    
-    // Since we can't directly download YouTube content in an Edge Function,
-    // this would need to be done via a separate service or scheduled function with proper tools
-    
-    // For demonstration, we'll just return success and indicate next steps
+    // Simulate the audio file path
+    const simulatedFilePath = `sermons/${newSermon.id}.mp3`;
+
+    // Immediately trigger the process-sermon function with the new sermon_id and simulated file_path
+    const processSermonResponse = await fetch(
+      `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-sermon`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // Pass the user's token if available
+        },
+        body: JSON.stringify({
+          sermon_id: newSermon.id,
+          file_path: simulatedFilePath,
+        }),
+      }
+    );
+
+    if (!processSermonResponse.ok) {
+      const errorText = await processSermonResponse.text();
+      console.error(`Failed to trigger process-sermon for new sermon ${newSermon.id}:`, errorText);
+      // Update sermon record with error status
+      await supabaseAdmin
+        .from('sermon_summaries')
+        .update({ 
+          ai_context: { 
+            status: 'error', 
+            error: `Failed to trigger AI analysis: ${errorText}` 
+          } 
+        })
+        .eq('id', newSermon.id);
+
+      return new Response(
+        JSON.stringify({ 
+          error: `Failed to trigger AI analysis for new sermon: ${errorText}`,
+          sermon_id: newSermon.id
+        }), 
+        { status: processSermonResponse.status, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const processSermonResult = await processSermonResponse.json();
+
+    // Success response
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Sermon record created from livestream',
+        message: 'Sermon record created and AI analysis triggered',
         sermon_id: newSermon.id,
         video_id: targetVideoId,
-        next_steps: [
-          "A background job would normally now download the video's audio",
-          "The audio would be uploaded to Supabase Storage",
-          "The process-sermon function would be triggered with the file path"
-        ],
-        note: "In a production environment, this would be handled by a separate service with YouTube download capabilities"
+        analysis_status: processSermonResult
       }), 
       { headers: { 'Content-Type': 'application/json' } }
     );
