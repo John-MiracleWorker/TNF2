@@ -217,7 +217,7 @@ const ChatPage = () => {
       // Create new abort controller for this request
       abortControllerRef.current = new AbortController();
       
-      // Set a timeout for the request (30 seconds)
+      // Set a timeout for the request (55 seconds)
       timeoutIdRef.current = window.setTimeout(() => {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort('Request timed out');
@@ -236,7 +236,7 @@ const ChatPage = () => {
           setCurrentStreamingMessage('');
           abortControllerRef.current = null;
         }
-      }, 30000);
+      }, 55000);
       
       try {
         // Reset streaming message
