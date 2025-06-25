@@ -54,8 +54,9 @@ const ChatPage = () => {
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
   
-  // Track whether we're recovering the chat
-  const [isRecoveringChat, setIsRecoveringChat] = useState(false);
+  // Flag to prevent saving during chat recovery
+  const recoveryCompleteRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
 
   // Use localStorage for persistence
   useEffect(() => {
@@ -68,7 +69,6 @@ const ChatPage = () => {
         const parsedMessages = JSON.parse(savedMessages);
         // Only restore if we have more than the initial message and the messages are valid
         if (parsedMessages && Array.isArray(parsedMessages) && parsedMessages.length > 1) {
-          setIsRecoveringChat(true);
           setMessages(parsedMessages);
           setConversationStarted(true);
           
@@ -83,24 +83,31 @@ const ChatPage = () => {
       if (savedThreadId && session) {
         setThreadId(savedThreadId);
       }
+      
+      // Mark initial load as complete
+      initialLoadDoneRef.current = true;
+      recoveryCompleteRef.current = true;
     } catch (e) {
       console.error('Error parsing saved messages:', e);
       localStorage.removeItem(CHAT_STORAGE_KEY);
-      setIsRecoveringChat(false);
+      
+      // Ensure recovery is marked as complete even on error
+      initialLoadDoneRef.current = true;
+      recoveryCompleteRef.current = true;
     }
   }, [session]);
   
   // Save messages to localStorage whenever they change
   useEffect(() => {
-    if (messages.length > 1 && !isRecoveringChat) {
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    if (!initialLoadDoneRef.current) {
+      return; // Skip saving until initial load is complete
     }
     
-    // If we were recovering the chat, mark it as complete after the first render
-    if (isRecoveringChat) {
-      setIsRecoveringChat(false);
+    // Only save if we have something meaningful to save (more than initial message)
+    if (messages.length > 1) {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
     }
-  }, [messages, isRecoveringChat]);
+  }, [messages]);
   
   // Save threadId to localStorage whenever it changes
   useEffect(() => {
