@@ -1,13 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.1';
-import { ChatOpenAI } from 'https://esm.sh/langchain@0.1.23/chat_models/openai?deps=langsmith@0.1.67';
-import {
-  ChatPromptTemplate,
-  SystemMessagePromptTemplate,
-  HumanMessagePromptTemplate,
-  MessagesPlaceholder
-} from 'https://esm.sh/langchain@0.1.23/prompts?deps=langsmith@0.1.67';
-import { LLMChain } from 'https://esm.sh/langchain@0.1.23/chains?deps=langsmith@0.1.67';
 
 // Build CORS headers dynamically so Authorization can be sent cross‑origin
 function buildCorsHeaders(origin: string | null) {
@@ -173,25 +165,117 @@ serve(async (req) => {
     content: message
   });
 
-  // -------------------- LLM call ----------------------------------------
-  const llm = new ChatOpenAI({
-    openAIApiKey,
-    modelName: 'gpt-4o',
-    temperature: 0.9,
-    streaming: true,
-    callbacks: [{ handleLLMNewToken: async (token: string) => await sendEvent({ content: token }) }]
-  });
-
-  const prompt = ChatPromptTemplate.fromPromptMessages([
-    SystemMessagePromptTemplate.fromTemplate(SYSTEM_TEMPLATE),
-    new MessagesPlaceholder('previousMessages'),
-    HumanMessagePromptTemplate.fromTemplate('{{humanMessage}}'),
-  ]);
-  const chain = new LLMChain({ llm, prompt });
-
+  // -------------------- OpenAI direct call (without LangChain) ----------
   try {
-    await chain.invoke({ previousMessages, humanMessage: message, userContext });
-    await sendEvent({ done: true });
+    // Save the assistant message with initial empty content
+    const { data: assistantMessage, error: assistantError } = await supabase
+      .from('chat_messages')
+      .insert({
+        thread_id: currentThreadId,
+        user_id: user.id,
+        role: 'assistant',
+        content: '' // Will be updated when streaming is complete
+      })
+      .select()
+      .single();
+    
+    if (assistantError) {
+      console.error("Error creating assistant message:", assistantError);
+    }
+
+    // Prepare messages for OpenAI
+    const messages = [
+      {
+        role: "system",
+        content: SYSTEM_TEMPLATE.replace("{{userContext}}", userContext)
+      },
+      ...previousMessages,
+      {
+        role: "user",
+        content: message
+      }
+    ];
+
+    // Make streaming request to OpenAI
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${openaiApiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: messages,
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      await sendEvent({ error: `OpenAI error: ${error}` });
+      await writer.close();
+      return response;
+    }
+
+    // Process the stream
+    if (!response.body) {
+      throw new Error("Response body is undefined");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let fullResponse = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        break;
+      }
+      
+      // Decode the chunk
+      const chunk = decoder.decode(value);
+      
+      // Process the SSE data
+      const lines = chunk.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.substring(6);
+          
+          // Check for [DONE]
+          if (data.trim() === "[DONE]") {
+            continue;
+          }
+          
+          try {
+            // Parse the JSON data
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content || "";
+            
+            if (content) {
+              fullResponse += content;
+              await sendEvent({ content: fullResponse });
+            }
+          } catch (e) {
+            console.error("Error parsing SSE JSON:", e);
+          }
+        }
+      }
+    }
+
+    // Update the assistant message with the complete response
+    if (assistantMessage?.id && fullResponse) {
+      const { error: updateError } = await supabase
+        .from('chat_messages')
+        .update({ content: fullResponse })
+        .eq('id', assistantMessage.id);
+        
+      if (updateError) {
+        console.error("Error updating assistant message:", updateError);
+      }
+    }
+
+    await sendEvent({ done: true, content: fullResponse });
   } catch (err: any) {
     await sendEvent({ error: 'Failed to generate response', details: err.message });
   } finally {
