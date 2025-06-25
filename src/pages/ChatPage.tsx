@@ -31,8 +31,8 @@ const THREAD_STORAGE_KEY = 'truenorth_chat_thread';
 
 // Maximum retry attempts for failed requests
 const MAX_RETRIES = 2;
-// Base timeout in milliseconds (50 seconds)
-const BASE_TIMEOUT = 50000;
+// Base timeout in milliseconds (55 seconds)
+const BASE_TIMEOUT = 55000;
 
 const ChatPage = () => {
   const { session } = useContext(AuthContext);
@@ -244,7 +244,7 @@ const ChatPage = () => {
           setCurrentStreamingMessage('');
           abortControllerRef.current = null;
         }
-      }, 55000);
+      }, BASE_TIMEOUT);
       
       try {
         // Reset streaming message
@@ -259,8 +259,7 @@ const ChatPage = () => {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
-            'X-Client-Info': 'truenorth-app',
-            'Cache-Control': 'no-cache'
+            'X-Client-Info': 'truenorth-app'
           },
           body: JSON.stringify({
             message: messageText,
@@ -355,6 +354,28 @@ const ChatPage = () => {
               id: `error_${Date.now()}`,
               role: 'assistant',
               content: "I'm sorry, the request timed out. Please try again with a shorter message or check your internet connection.",
+            }]);
+          }
+        } else if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+          // Likely a CORS or network issue
+          console.error('Network error:', error);
+          
+          // Implement retry logic
+          if (retry < MAX_RETRIES) {
+            console.log(`Retrying request (${retry + 1}/${MAX_RETRIES})...`);
+            
+            // Add a slight delay before retrying
+            setTimeout(() => {
+              handleSendMessage(messageText, retry + 1);
+            }, 1000 * (retry + 1)); // Exponential backoff
+            
+            return;
+          } else {
+            // We've exhausted retries
+            setMessages((prev) => [...prev, {
+              id: `error_${Date.now()}`,
+              role: 'assistant',
+              content: "I'm sorry, I'm having trouble connecting. There may be a network issue or CORS configuration problem. Please try again in a moment.",
             }]);
           }
         } else {

@@ -6,7 +6,7 @@ function buildCorsHeaders(origin: string | null) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Headers': 'authorization, content-type, cache-control, x-client-info',
     // Required when using Authorization header across origins
     'Access-Control-Allow-Credentials': 'true',
   } as Record<string, string>;
