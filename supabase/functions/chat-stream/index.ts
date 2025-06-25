@@ -189,7 +189,10 @@ serve(async (req) => {
         role: "system",
         content: SYSTEM_TEMPLATE.replace("{{userContext}}", userContext)
       },
-      ...previousMessages,
+      ...previousMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      })),
       {
         role: "user",
         content: message
@@ -206,25 +209,28 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "gpt-4o",
         messages: messages,
-        stream: true
+        stream: true,
+        temperature: 0.7
       })
     });
 
     if (!response.ok) {
       const error = await response.text();
+      console.error("OpenAI API Error:", error);
       await sendEvent({ error: `OpenAI error: ${error}` });
       await writer.close();
       return response;
     }
 
     // Process the stream
-    if (!response.body) {
+    const reader = response.body?.getReader();
+    if (!reader) {
       throw new Error("Response body is undefined");
     }
 
-    const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let fullResponse = "";
+    let buffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -234,10 +240,13 @@ serve(async (req) => {
       }
       
       // Decode the chunk
-      const chunk = decoder.decode(value);
+      buffer += decoder.decode(value, { stream: true });
       
-      // Process the SSE data
-      const lines = chunk.split("\n");
+      // Process complete lines from the buffer
+      let lines = buffer.split('\n');
+      // Keep the last (potentially incomplete) line in the buffer
+      buffer = lines.pop() || "";
+      
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           const data = line.substring(6);
@@ -257,7 +266,7 @@ serve(async (req) => {
               await sendEvent({ content: fullResponse });
             }
           } catch (e) {
-            console.error("Error parsing SSE JSON:", e);
+            console.error("Error parsing SSE JSON:", e, "Line:", line);
           }
         }
       }
@@ -277,6 +286,7 @@ serve(async (req) => {
 
     await sendEvent({ done: true, content: fullResponse });
   } catch (err: any) {
+    console.error("Error in chat stream:", err);
     await sendEvent({ error: 'Failed to generate response', details: err.message });
   } finally {
     await writer.close();

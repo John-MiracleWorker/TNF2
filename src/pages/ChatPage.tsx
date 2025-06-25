@@ -50,9 +50,12 @@ const ChatPage = () => {
   const { toast } = useToast();
   const [hasProcessedInitialVerse, setHasProcessedInitialVerse] = useState(false);
   
-  // New state for chat streaming
+  // State for chat streaming
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Track whether we're recovering the chat
+  const [isRecoveringChat, setIsRecoveringChat] = useState(false);
 
   // Use localStorage for persistence
   useEffect(() => {
@@ -65,6 +68,7 @@ const ChatPage = () => {
         const parsedMessages = JSON.parse(savedMessages);
         // Only restore if we have more than the initial message and the messages are valid
         if (parsedMessages && Array.isArray(parsedMessages) && parsedMessages.length > 1) {
+          setIsRecoveringChat(true);
           setMessages(parsedMessages);
           setConversationStarted(true);
           
@@ -82,15 +86,21 @@ const ChatPage = () => {
     } catch (e) {
       console.error('Error parsing saved messages:', e);
       localStorage.removeItem(CHAT_STORAGE_KEY);
+      setIsRecoveringChat(false);
     }
   }, [session]);
   
   // Save messages to localStorage whenever they change
   useEffect(() => {
-    if (messages.length > 1) {
+    if (messages.length > 1 && !isRecoveringChat) {
       localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
     }
-  }, [messages]);
+    
+    // If we were recovering the chat, mark it as complete after the first render
+    if (isRecoveringChat) {
+      setIsRecoveringChat(false);
+    }
+  }, [messages, isRecoveringChat]);
   
   // Save threadId to localStorage whenever it changes
   useEffect(() => {
@@ -185,6 +195,9 @@ const ChatPage = () => {
       abortControllerRef.current = new AbortController();
       
       try {
+        // Reset streaming message
+        setCurrentStreamingMessage('');
+
         // Call the chat API with streaming enabled
         const response = await fetch(`${supabaseUrl}/functions/v1/chat-stream`, {
           method: 'POST',
@@ -209,9 +222,6 @@ const ChatPage = () => {
           throw new Error('Response body is not readable');
         }
 
-        // Reset streaming message
-        setCurrentStreamingMessage('');
-
         // Read stream chunks
         while (true) {
           const { done, value } = await reader.read();
@@ -220,14 +230,14 @@ const ChatPage = () => {
           // Convert the chunk to text
           const chunk = new TextDecoder().decode(value);
           
-          // Process each line (in case multiple events arrived in one chunk)
-          const lines = chunk.split('\n\n');
-          for (const line of lines) {
-            if (!line.trim()) continue;
+          // Process each event (in case multiple events arrived in one chunk)
+          const events = chunk.split('\n\n');
+          for (const event of events) {
+            if (!event.trim()) continue;
             
-            if (line.startsWith('data: ')) {
+            if (event.startsWith('data: ')) {
               try {
-                const data = JSON.parse(line.substring(6));
+                const data = JSON.parse(event.substring(6));
                 
                 // Handle various message types
                 if (data.threadId && !threadId) {
@@ -252,7 +262,7 @@ const ChatPage = () => {
                   throw new Error(data.error);
                 }
               } catch (e) {
-                console.error('Error parsing stream data:', e, line);
+                console.error('Error parsing stream data:', e, event);
               }
             }
           }
