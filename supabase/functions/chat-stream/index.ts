@@ -1,12 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.1';
 
-// Build CORS headers dynamically so Authorization can be sent cross‑origin
+// Build CORS headers to allow cross-origin requests with credentials
 function buildCorsHeaders(origin: string | null) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, content-type, cache-control, x-client-info, x-client-info',
+    'Access-Control-Allow-Headers': 'authorization, content-type, cache-control, x-client-info, apikey, x-client-info',
     // Required when using Authorization header across origins
     'Access-Control-Allow-Credentials': 'true',
   } as Record<string, string>;
@@ -201,7 +201,7 @@ serve(async (req) => {
 
     // Make streaming request to OpenAI with timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort('Request timed out'), 50000); // 50 second timeout
+    const timeoutId = setTimeout(() => controller.abort('Request timed out'), 45000); // 45 second timeout
 
     try {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -215,7 +215,7 @@ serve(async (req) => {
           messages: messages,
           stream: true,
           temperature: 0.7,
-          max_tokens: 2000 // Limit token count to prevent timeouts
+          max_tokens: 1500 // Limit token count to prevent timeouts
         }),
         signal: controller.signal
       });
@@ -294,6 +294,7 @@ serve(async (req) => {
 
       await sendEvent({ done: true, content: fullResponse });
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error("Error in chat stream:", err);
       
       if (err.name === 'AbortError') {
