@@ -57,14 +57,14 @@ const ChatPage = () => {
   // Use localStorage for persistence
   useEffect(() => {
     // Attempt to restore messages from localStorage
-    const savedMessages = localStorage.getItem(CHAT_STORAGE_KEY);
-    const savedThreadId = localStorage.getItem(THREAD_STORAGE_KEY);
-    
-    if (savedMessages && session) {
-      try {
+    try {
+      const savedMessages = localStorage.getItem(CHAT_STORAGE_KEY);
+      const savedThreadId = localStorage.getItem(THREAD_STORAGE_KEY);
+      
+      if (savedMessages && session) {
         const parsedMessages = JSON.parse(savedMessages);
-        // Only restore if we have more than the initial message
-        if (parsedMessages.length > 1) {
+        // Only restore if we have more than the initial message and the messages are valid
+        if (parsedMessages && Array.isArray(parsedMessages) && parsedMessages.length > 1) {
           setMessages(parsedMessages);
           setConversationStarted(true);
           
@@ -74,14 +74,14 @@ const ChatPage = () => {
             description: 'Your previous conversation has been recovered.',
           });
         }
-      } catch (e) {
-        console.error('Error parsing saved messages:', e);
-        localStorage.removeItem(CHAT_STORAGE_KEY);
       }
-    }
-    
-    if (savedThreadId && session) {
-      setThreadId(savedThreadId);
+      
+      if (savedThreadId && session) {
+        setThreadId(savedThreadId);
+      }
+    } catch (e) {
+      console.error('Error parsing saved messages:', e);
+      localStorage.removeItem(CHAT_STORAGE_KEY);
     }
   }, [session]);
   
@@ -209,7 +209,7 @@ const ChatPage = () => {
           throw new Error('Response body is not readable');
         }
 
-        // Set up streaming message
+        // Reset streaming message
         setCurrentStreamingMessage('');
 
         // Read stream chunks
@@ -221,9 +221,9 @@ const ChatPage = () => {
           const chunk = new TextDecoder().decode(value);
           
           // Process each line (in case multiple events arrived in one chunk)
-          const lines = chunk.split('\n');
+          const lines = chunk.split('\n\n');
           for (const line of lines) {
-            if (line.trim() === '') continue;
+            if (!line.trim()) continue;
             
             if (line.startsWith('data: ')) {
               try {
