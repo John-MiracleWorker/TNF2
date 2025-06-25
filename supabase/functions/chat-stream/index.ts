@@ -98,8 +98,7 @@ serve(async (req) => {
     });
   }
 
-  supabase.auth.setAuth(token);
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -119,7 +118,7 @@ serve(async (req) => {
     ...corsHeaders,
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
+    'Connection': 'keep-alive',
   };
   const response = new Response(stream.readable, { headers: responseHeaders });
 
