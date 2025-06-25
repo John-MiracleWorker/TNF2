@@ -57,6 +57,9 @@ const ChatPage = () => {
   // Flag to prevent saving during chat recovery
   const recoveryCompleteRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+  
+  // Timeout reference for request timeout
+  const timeoutIdRef = useRef<number | null>(null);
 
   // Use localStorage for persistence
   useEffect(() => {
@@ -143,6 +146,21 @@ const ChatPage = () => {
     }
   }, [location.search, hasProcessedInitialVerse, isLoading]);
 
+  // Cleanup function to abort any pending requests and clear timeouts
+  const cleanupRequest = () => {
+    // Abort any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Clear any pending timeouts
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
+  };
+
   const handleSendMessage = async (messageText: string = input) => {
     if (!messageText.trim() || isLoading) return;
 
@@ -157,6 +175,9 @@ const ChatPage = () => {
     }
 
     console.log('Sending message:', messageText);
+
+    // Clean up any existing request
+    cleanupRequest();
 
     const userMessage: ChatMessageType = {
       id: `user_${Date.now()}`,
@@ -193,18 +214,13 @@ const ChatPage = () => {
         return;
       }
       
-      // Cancel any previous request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      
       // Create new abort controller for this request
       abortControllerRef.current = new AbortController();
       
       // Set a timeout for the request (30 seconds)
-      const timeoutId = setTimeout(() => {
+      timeoutIdRef.current = window.setTimeout(() => {
         if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
+          abortControllerRef.current.abort('Request timed out');
           
           // Add timeout error message
           setMessages(prev => [
@@ -241,10 +257,14 @@ const ChatPage = () => {
         });
 
         // Clear the timeout since we got a response
-        clearTimeout(timeoutId);
+        if (timeoutIdRef.current) {
+          clearTimeout(timeoutIdRef.current);
+          timeoutIdRef.current = null;
+        }
 
         if (!response.ok) {
-          throw new Error(`Failed to get response from assistant: ${response.status} ${response.statusText}`);
+          const errorText = await response.text();
+          throw new Error(`Failed to get response from assistant: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         // Process the stream
@@ -254,7 +274,7 @@ const ChatPage = () => {
         }
 
         // Read stream chunks
-        const decoder = new TextDecoder();
+        const decoder = new TextDecoder("utf-8");
         let buffer = "";
         let fullResponse = "";
 
@@ -266,22 +286,21 @@ const ChatPage = () => {
           // Decode the chunk and add to buffer
           buffer += decoder.decode(value, { stream: true });
           
-          // Process complete events from the buffer
-          let eventLines = buffer.split('\n\n');
-          // Keep the last line in buffer (it might be incomplete)
-          buffer = eventLines.pop() || '';
+          // Process complete lines from the buffer
+          let lines = buffer.split('\n\n');
+          // Keep the last (potentially incomplete) line in the buffer
+          buffer = lines.pop() || "";
           
-          for (const eventLine of eventLines) {
-            if (eventLine.startsWith('data: ')) {
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
               try {
-                const data = JSON.parse(eventLine.slice(6));
+                // Parse the JSON data
+                const data = JSON.parse(line.substring(6));
+                const content = data.content || "";
                 
-                // Handle various message types
-                if (data.threadId && !threadId) {
-                  setThreadId(data.threadId);
-                } else if (data.content) {
-                  fullResponse = data.content;
-                  setCurrentStreamingMessage(data.content);
+                if (content) {
+                  fullResponse = content;
+                  setCurrentStreamingMessage(content);
                   
                   // If this is the final message chunk
                   if (data.done) {
@@ -289,24 +308,42 @@ const ChatPage = () => {
                     const newAssistantMessage: ChatMessageType = {
                       id: `assistant_${Date.now()}`,
                       role: 'assistant',
-                      content: data.content,
+                      content: content,
                     };
                     
                     setMessages((prev) => [...prev, newAssistantMessage]);
                     setCurrentStreamingMessage('');
                   }
-                } else if (data.error) {
+                }
+                
+                // If we received a threadId, save it
+                if (data.threadId && !threadId) {
+                  setThreadId(data.threadId);
+                }
+                
+                // Handle errors
+                if (data.error) {
                   throw new Error(data.error);
                 }
               } catch (parseError) {
-                console.error('Error parsing event:', parseError, eventLine);
+                console.error('Error parsing event:', parseError, line);
               }
             }
           }
         }
       } catch (error) {
+        // Handle different error types
         if (error.name === 'AbortError') {
-          console.log('Request was aborted');
+          console.log('Request was aborted:', error.message);
+          
+          // Only add a message if it was a timeout (not a user-initiated abort)
+          if (error.message === 'Request timed out') {
+            setMessages((prev) => [...prev, {
+              id: `error_${Date.now()}`,
+              role: 'assistant',
+              content: "I'm sorry, the request timed out. Please try again with a shorter message or check your internet connection.",
+            }]);
+          }
         } else {
           // Handle other errors
           console.error('Error in fetch:', error);
@@ -328,6 +365,12 @@ const ChatPage = () => {
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      
+      // Clear any remaining timeout
+      if (timeoutIdRef.current) {
+        clearTimeout(timeoutIdRef.current);
+        timeoutIdRef.current = null;
+      }
     }
   };
 
@@ -372,7 +415,8 @@ const ChatPage = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to create journal entry: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to create journal entry: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -417,6 +461,12 @@ const ChatPage = () => {
       abortControllerRef.current = null;
     }
     
+    // Clear any pending timeouts
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
+    
     setMessages([{
       id: 'initial-message',
       role: 'assistant',
@@ -444,6 +494,13 @@ const ChatPage = () => {
 
   // Get the last assistant message for voice chat
   const lastAssistantMessage = messages.slice().reverse().find(msg => msg.role === 'assistant');
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupRequest();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
