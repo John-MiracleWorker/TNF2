@@ -6,7 +6,7 @@ function buildCorsHeaders(origin: string | null) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, content-type, cache-control, x-client-info',
+    'Access-Control-Allow-Headers': 'authorization, content-type, cache-control, x-client-info, x-client-info',
     // Required when using Authorization header across origins
     'Access-Control-Allow-Credentials': 'true',
   } as Record<string, string>;
@@ -199,92 +199,114 @@ serve(async (req) => {
       }
     ];
 
-    // Make streaming request to OpenAI
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${openaiApiKey}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: messages,
-        stream: true,
-        temperature: 0.7
-      })
-    });
+    // Make streaming request to OpenAI with timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort('Request timed out'), 50000); // 50 second timeout
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("OpenAI API Error:", error);
-      await sendEvent({ error: `OpenAI error: ${error}` });
-      await writer.close();
-      return response;
-    }
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${openaiApiKey}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: messages,
+          stream: true,
+          temperature: 0.7,
+          max_tokens: 2000 // Limit token count to prevent timeouts
+        }),
+        signal: controller.signal
+      });
 
-    // Process the stream
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Response body is undefined");
-    }
+      clearTimeout(timeoutId);
 
-    const decoder = new TextDecoder("utf-8");
-    let fullResponse = "";
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      
-      if (done) {
-        break;
+      if (!response.ok) {
+        const error = await response.text();
+        console.error("OpenAI API Error:", error);
+        await sendEvent({ error: `OpenAI error: ${error}` });
+        await writer.close();
+        return response;
       }
-      
-      // Decode the chunk
-      buffer += decoder.decode(value, { stream: true });
-      
-      // Process complete lines from the buffer
-      let lines = buffer.split('\n');
-      // Keep the last (potentially incomplete) line in the buffer
-      buffer = lines.pop() || "";
-      
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.substring(6);
-          
-          // Check for [DONE]
-          if (data.trim() === "[DONE]") {
-            continue;
-          }
-          
-          try {
-            // Parse the JSON data
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content || "";
+
+      // Process the stream
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Response body is undefined");
+      }
+
+      const decoder = new TextDecoder("utf-8");
+      let fullResponse = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+        
+        // Decode the chunk
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete lines from the buffer
+        let lines = buffer.split('\n');
+        // Keep the last (potentially incomplete) line in the buffer
+        buffer = lines.pop() || "";
+        
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.substring(6);
             
-            if (content) {
-              fullResponse += content;
-              await sendEvent({ content: fullResponse });
+            // Check for [DONE]
+            if (data.trim() === "[DONE]") {
+              continue;
             }
-          } catch (e) {
-            console.error("Error parsing SSE JSON:", e, "Line:", line);
+            
+            try {
+              // Parse the JSON data
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content || "";
+              
+              if (content) {
+                fullResponse += content;
+                await sendEvent({ content: fullResponse });
+              }
+            } catch (e) {
+              console.error("Error parsing SSE JSON:", e, "Line:", line);
+            }
           }
         }
       }
-    }
 
-    // Update the assistant message with the complete response
-    if (assistantMessage?.id && fullResponse) {
-      const { error: updateError } = await supabase
-        .from('chat_messages')
-        .update({ content: fullResponse })
-        .eq('id', assistantMessage.id);
-        
-      if (updateError) {
-        console.error("Error updating assistant message:", updateError);
+      // Update the assistant message with the complete response
+      if (assistantMessage?.id && fullResponse) {
+        const { error: updateError } = await supabase
+          .from('chat_messages')
+          .update({ content: fullResponse })
+          .eq('id', assistantMessage.id);
+          
+        if (updateError) {
+          console.error("Error updating assistant message:", updateError);
+        }
+      }
+
+      await sendEvent({ done: true, content: fullResponse });
+    } catch (err: any) {
+      console.error("Error in chat stream:", err);
+      
+      if (err.name === 'AbortError') {
+        await sendEvent({ 
+          error: 'Request timed out. Please try with a shorter message or try again later.' 
+        });
+      } else {
+        await sendEvent({ 
+          error: `Failed to generate response: ${err.message}`, 
+          details: err.message 
+        });
       }
     }
-
-    await sendEvent({ done: true, content: fullResponse });
   } catch (err: any) {
     console.error("Error in chat stream:", err);
     await sendEvent({ error: 'Failed to generate response', details: err.message });

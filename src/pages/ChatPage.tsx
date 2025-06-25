@@ -31,8 +31,8 @@ const THREAD_STORAGE_KEY = 'truenorth_chat_thread';
 
 // Maximum retry attempts for failed requests
 const MAX_RETRIES = 2;
-// Base timeout in milliseconds (55 seconds)
-const BASE_TIMEOUT = 55000;
+// Base timeout in milliseconds (50 seconds)
+const BASE_TIMEOUT = 50000;
 
 const ChatPage = () => {
   const { session } = useContext(AuthContext);
@@ -225,7 +225,7 @@ const ChatPage = () => {
       // Create new abort controller for this request
       abortControllerRef.current = new AbortController();
       
-      // Set a timeout for the request (55 seconds)
+      // Set a timeout for the request (50 seconds)
       timeoutIdRef.current = window.setTimeout(() => {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort('Request timed out');
