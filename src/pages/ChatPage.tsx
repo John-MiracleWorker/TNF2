@@ -201,6 +201,27 @@ const ChatPage = () => {
       // Create new abort controller for this request
       abortControllerRef.current = new AbortController();
       
+      // Set a timeout for the request (30 seconds)
+      const timeoutId = setTimeout(() => {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          
+          // Add timeout error message
+          setMessages(prev => [
+            ...prev,
+            {
+              id: `error_${Date.now()}`,
+              role: 'assistant',
+              content: "I'm sorry, but the request timed out. Please try again."
+            }
+          ]);
+          
+          setIsLoading(false);
+          setCurrentStreamingMessage('');
+          abortControllerRef.current = null;
+        }
+      }, 30000);
+      
       try {
         // Reset streaming message
         setCurrentStreamingMessage('');
@@ -219,6 +240,9 @@ const ChatPage = () => {
           signal: abortControllerRef.current.signal
         });
 
+        // Clear the timeout since we got a response
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
           throw new Error(`Failed to get response from assistant: ${response.status} ${response.statusText}`);
         }
@@ -230,26 +254,33 @@ const ChatPage = () => {
         }
 
         // Read stream chunks
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullResponse = "";
+
         while (true) {
           const { done, value } = await reader.read();
+          
           if (done) break;
 
-          // Convert the chunk to text
-          const chunk = new TextDecoder().decode(value);
+          // Decode the chunk and add to buffer
+          buffer += decoder.decode(value, { stream: true });
           
-          // Process each event (in case multiple events arrived in one chunk)
-          const events = chunk.split('\n\n');
-          for (const event of events) {
-            if (!event.trim()) continue;
-            
-            if (event.startsWith('data: ')) {
+          // Process complete events from the buffer
+          let eventLines = buffer.split('\n\n');
+          // Keep the last line in buffer (it might be incomplete)
+          buffer = eventLines.pop() || '';
+          
+          for (const eventLine of eventLines) {
+            if (eventLine.startsWith('data: ')) {
               try {
-                const data = JSON.parse(event.substring(6));
+                const data = JSON.parse(eventLine.slice(6));
                 
                 // Handle various message types
                 if (data.threadId && !threadId) {
                   setThreadId(data.threadId);
                 } else if (data.content) {
+                  fullResponse = data.content;
                   setCurrentStreamingMessage(data.content);
                   
                   // If this is the final message chunk
@@ -263,13 +294,12 @@ const ChatPage = () => {
                     
                     setMessages((prev) => [...prev, newAssistantMessage]);
                     setCurrentStreamingMessage('');
-                    setIsLoading(false);
                   }
                 } else if (data.error) {
                   throw new Error(data.error);
                 }
-              } catch (e) {
-                console.error('Error parsing stream data:', e, event);
+              } catch (parseError) {
+                console.error('Error parsing event:', parseError, eventLine);
               }
             }
           }
@@ -278,19 +308,23 @@ const ChatPage = () => {
         if (error.name === 'AbortError') {
           console.log('Request was aborted');
         } else {
-          throw error;
+          // Handle other errors
+          console.error('Error in fetch:', error);
+          setMessages((prev) => [...prev, {
+            id: `error_${Date.now()}`,
+            role: 'assistant',
+            content: "I'm sorry, I'm having trouble connecting. Please try again in a moment.",
+          }]);
         }
       }
     } catch (error) {
       console.error('Error sending message:', error);
       
-      if (error.name !== 'AbortError') {
-        setMessages((prev) => [...prev, {
-          id: `error_${Date.now()}`,
-          role: 'assistant',
-          content: "I'm sorry, I'm having trouble connecting. Please try again in a moment.",
-        }]);
-      }
+      setMessages((prev) => [...prev, {
+        id: `error_${Date.now()}`,
+        role: 'assistant',
+        content: "I'm sorry, I'm having trouble connecting. Please try again in a moment.",
+      }]);
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
