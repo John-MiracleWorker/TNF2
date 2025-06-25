@@ -29,6 +29,11 @@ import {
 const CHAT_STORAGE_KEY = 'truenorth_chat_messages';
 const THREAD_STORAGE_KEY = 'truenorth_chat_thread';
 
+// Maximum retry attempts for failed requests
+const MAX_RETRIES = 2;
+// Base timeout in milliseconds (50 seconds)
+const BASE_TIMEOUT = 50000;
+
 const ChatPage = () => {
   const { session } = useContext(AuthContext);
   const location = useLocation();
@@ -60,6 +65,9 @@ const ChatPage = () => {
   
   // Timeout reference for request timeout
   const timeoutIdRef = useRef<number | null>(null);
+  
+  // Retry counter for failed requests
+  const retryCountRef = useRef(0);
 
   // Use localStorage for persistence
   useEffect(() => {
@@ -161,7 +169,7 @@ const ChatPage = () => {
     }
   };
 
-  const handleSendMessage = async (messageText: string = input) => {
+  const handleSendMessage = async (messageText: string = input, retry = 0) => {
     if (!messageText.trim() || isLoading) return;
 
     // Check if user is authenticated
@@ -228,7 +236,7 @@ const ChatPage = () => {
             {
               id: `error_${Date.now()}`,
               role: 'assistant',
-              content: "I'm sorry, but the request timed out. Please try again."
+              content: "I'm sorry, but the request timed out. Please try again with a shorter message or check your internet connection."
             }
           ]);
           
@@ -242,12 +250,17 @@ const ChatPage = () => {
         // Reset streaming message
         setCurrentStreamingMessage('');
 
+        // Set the current retry count
+        retryCountRef.current = retry;
+
         // Call the chat API with streaming enabled
         const response = await fetch(`${supabaseUrl}/functions/v1/chat-stream`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
+            'X-Client-Info': 'truenorth-app',
+            'Cache-Control': 'no-cache'
           },
           body: JSON.stringify({
             message: messageText,
@@ -347,11 +360,25 @@ const ChatPage = () => {
         } else {
           // Handle other errors
           console.error('Error in fetch:', error);
-          setMessages((prev) => [...prev, {
-            id: `error_${Date.now()}`,
-            role: 'assistant',
-            content: "I'm sorry, I'm having trouble connecting. Please try again in a moment.",
-          }]);
+          
+          // Implement retry logic
+          if (retry < MAX_RETRIES) {
+            console.log(`Retrying request (${retry + 1}/${MAX_RETRIES})...`);
+            
+            // Add a slight delay before retrying
+            setTimeout(() => {
+              handleSendMessage(messageText, retry + 1);
+            }, 1000 * (retry + 1)); // Exponential backoff
+            
+            return;
+          } else {
+            // We've exhausted retries
+            setMessages((prev) => [...prev, {
+              id: `error_${Date.now()}`,
+              role: 'assistant',
+              content: "I'm sorry, I'm having trouble connecting. Our servers might be busy. Please try again in a moment.",
+            }]);
+          }
         }
       }
     } catch (error) {
